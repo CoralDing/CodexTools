@@ -1,0 +1,10 @@
+# 文件说明：忽略 Swift 构建产物和本机开发状态
+# 作者：dingyi60(Codex)
+# 创建时间：2026-08-25
+
+.build/
+.swiftpm/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+dist/
