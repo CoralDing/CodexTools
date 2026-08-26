@@ -8,3 +8,5 @@
 xcuserdata/
 *.xcuserstate
 dist/
+Resources/AppIcon.iconset/
+Resources/AppIconSource/AppIcon.png

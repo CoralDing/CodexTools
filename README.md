@@ -30,6 +30,14 @@ open dist/CodexTools.app
 
 打包脚本会生成本地临时签名的 `dist/CodexTools.app`。首次启用提醒时，macOS 会请求通知权限。应用提供主操作窗口，也可以从菜单栏随时快速查看用量。
 
+## DMG 安装包
+
+```bash
+./scripts/package_dmg.sh
+```
+
+脚本会依次生成应用图标、构建发布版应用，并输出 `dist/CodexTools-<版本>-macos-<架构>.dmg`。打开 DMG（macOS 磁盘映像安装包）后，将 `CodexTools.app` 拖到“Applications”即可完成安装。
+
 ## 验证
 
 ```bash
@@ -39,6 +47,8 @@ swift test
 ## 目录
 
 - `Sources/CodexTools`：原生 SwiftUI（苹果声明式界面框架）应用。
+- `Resources/AppIconSource/AppIcon-1024.png`：应用图标高分辨率源图。
+- `Resources/AppIcon.icns`：Finder 和应用包使用的 macOS 多尺寸图标。
 - `Design/codextools-glass-concept.png`：玻璃界面概念规格图。
 - `Design/codextools-glass-final-main.png`：最终主窗口预览。
 - `Design/codextools-glass-final-menu.png`：最终菜单栏面板预览。
