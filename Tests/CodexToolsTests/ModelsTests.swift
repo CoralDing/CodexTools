@@ -14,7 +14,10 @@ final class ModelsTests: XCTestCase {
     /// 验证嵌套接口字段可以被解析，并正确计算剩余额度与百分比。
     func testDashboardParserCalculatesRemainingQuota() {
         let profile: JSONValue = .object([
-            "data": .object(["balance": .number(128.4)])
+            "data": .object([
+                "balance": .number(128.4),
+                "concurrency": .number(10)
+            ])
         ])
         let summary: JSONValue = .object(["total_quota": .number(500)])
         let progress: JSONValue = .object([
@@ -40,6 +43,7 @@ final class ModelsTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.balance, 128.4)
+        XCTAssertEqual(snapshot.concurrencyLimit, 10)
         XCTAssertEqual(snapshot.quotaRemaining, 180)
         XCTAssertEqual(snapshot.quotaRemainingPercent, 36)
         XCTAssertEqual(snapshot.periodTokens, 1_284_620)
@@ -61,6 +65,7 @@ final class ModelsTests: XCTestCase {
         )
 
         XCTAssertNil(snapshot.balance)
+        XCTAssertNil(snapshot.concurrencyLimit)
         XCTAssertNil(snapshot.quotaProgress)
         XCTAssertNil(snapshot.quotaRemaining)
         XCTAssertNil(snapshot.periodTokens)
@@ -92,7 +97,67 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(UsageFormatter.compactTokens(12_400), "12.4K")
         XCTAssertEqual(UsageFormatter.cost(3.42), "$3.42")
         XCTAssertEqual(UsageFormatter.cost(0.0034), "$0.0034")
+        XCTAssertEqual(UsageFormatter.balanceChange(-0.688), "-$0.69")
+        XCTAssertEqual(UsageFormatter.balanceChange(20), "+$20.00")
+        XCTAssertEqual(UsageFormatter.balanceChange(0), "$0.00")
+        XCTAssertEqual(UsageFormatter.concurrencyLimit(10), "10")
+        XCTAssertEqual(UsageFormatter.concurrencyLimit(0), "不限")
+        XCTAssertEqual(UsageFormatter.concurrencyLimit(nil), "—")
         XCTAssertEqual(UsageFormatter.duration(milliseconds: 1_286), "1.29 s")
+    }
+
+    /// 验证调用、兑换和充值三类记录会合并为统一余额活动并按事件时间倒序排列。
+    func testBalanceActivityParserMergesAllUserVisibleBalanceSources() throws {
+        let usage: JSONValue = .object([
+            "data": .object([
+                "items": .array([
+                    .object([
+                        "created_at": .string("2026-08-26T01:20:00Z"),
+                        "model": .string("gpt-5.6-sol"),
+                        "input_tokens": .number(100),
+                        "output_tokens": .number(20),
+                        "actual_cost": .number(0.4)
+                    ])
+                ])
+            ])
+        ])
+        let redeem: JSONValue = .object([
+            "data": .array([
+                .object([
+                    "type": .string("admin_balance"),
+                    "value": .number(5),
+                    "used_at": .string("2026-08-26T01:30:00Z")
+                ]),
+                .object([
+                    "type": .string("concurrency"),
+                    "value": .number(10),
+                    "used_at": .string("2026-08-26T01:40:00Z")
+                ])
+            ])
+        ])
+        let payments: JSONValue = .object([
+            "data": .object([
+                "items": .array([
+                    .object([
+                        "order_type": .string("balance"),
+                        "status": .string("completed"),
+                        "amount": .number(20),
+                        "payment_type": .string("alipay"),
+                        "completed_at": .string("2026-08-26T01:10:00Z")
+                    ])
+                ])
+            ])
+        ])
+
+        let activities = BalanceActivityParser.parse(
+            usageResponse: usage,
+            redeemResponse: redeem,
+            paymentResponse: payments
+        )
+
+        XCTAssertEqual(activities.count, 3)
+        XCTAssertEqual(activities.map(\.title), ["管理员增加余额", "gpt-5.6-sol", "余额充值"])
+        XCTAssertEqual(activities.map(\.amountChange), [5, -0.4, 20])
     }
 
     /// 验证令牌在一分钟内过期时提前刷新，较远过期时间则继续复用。

@@ -59,6 +59,13 @@ final class QAWindowAppDelegate: NSObject, NSApplicationDelegate {
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(MainWindowView().environmentObject(state))
             windowSize = NSSize(width: 920, height: 680)
+        case "balance-activity":
+            state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            rootView = AnyView(
+                BalanceActivityView(balance: state.snapshot?.balance)
+                    .environmentObject(state)
+            )
+            windowSize = NSSize(width: 430, height: 480)
         default:
             state = AppState(restoreStoredSession: false)
             rootView = AnyView(RootView().environmentObject(state))

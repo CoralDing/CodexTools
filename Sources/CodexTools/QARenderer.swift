@@ -86,6 +86,15 @@ enum QARenderer {
                 view: AnyView(SettingsView().environmentObject(state)),
                 size: CGSize(width: 420, height: 660)
             )
+        case "balance-activity":
+            let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            return RenderTarget(
+                view: AnyView(
+                    BalanceActivityView(balance: state.snapshot?.balance)
+                        .environmentObject(state)
+                ),
+                size: CGSize(width: 430, height: 480)
+            )
         default:
             let state = AppState(restoreStoredSession: false)
             return RenderTarget(

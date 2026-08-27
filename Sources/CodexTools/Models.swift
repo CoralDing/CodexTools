@@ -260,9 +260,24 @@ enum UsageFormatter {
         return "$" + value.formatted(.number.precision(.fractionLength(fractionLength)))
     }
 
+    /// 余额活动使用正负号区分入账和扣减；零金额不显示误导性的符号。
+    static func balanceChange(_ value: Double) -> String {
+        let formattedCost = cost(abs(value))
+        if value > 0 { return "+\(formattedCost)" }
+        if value < 0 { return "-\(formattedCost)" }
+        return formattedCost
+    }
+
     /// 请求数按整数和本地千位分隔符显示，接口返回浮点编码时也不会出现小数尾数。
     static func requestCount(_ value: Double?) -> String {
         guard let value else { return "—" }
+        return value.formatted(.number.precision(.fractionLength(0)))
+    }
+
+    /// Sub2API 约定并发值小于等于零表示不限制，正数按整数显示允许同时执行的请求数。
+    static func concurrencyLimit(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        if value <= 0 { return "不限" }
         return value.formatted(.number.precision(.fractionLength(0)))
     }
 
@@ -299,6 +314,24 @@ struct UsageRecord: Sendable, Equatable {
     let recordedMultiplier: Double?
     let durationMilliseconds: Double?
     let billingMode: String?
+}
+
+/// 区分余额增加、调用消费和人工调整，让弹窗可以使用一致的颜色与图标语义。
+enum BalanceActivityKind: Sendable, Equatable {
+    case usage
+    case recharge
+    case adjustment
+}
+
+/// 表示来自用量、兑换记录或支付订单的一条统一余额变动。
+struct BalanceActivity: Sendable, Equatable {
+    let createdAt: Date
+    let kind: BalanceActivityKind
+    let title: String
+    let detail: String
+    let amountChange: Double
+    let totalTokens: Double?
+    let durationMilliseconds: Double?
 }
 
 /// 表示 Sub2API 分页调用记录中的一页，页数用于判断是否需要继续向前读取。
@@ -377,6 +410,135 @@ enum UsageRecordParser {
         let standard = ISO8601DateFormatter()
         standard.formatOptions = [.withInternetDateTime]
         return standard.date(from: value)
+    }
+}
+
+/// 将 Sub2API 分散在三个只读接口中的余额变动合并为统一、倒序的活动列表。
+enum BalanceActivityParser {
+    /// 合并调用扣费、兑换/人工调整和已完成充值订单，最终只保留最近指定条数。
+    static func parse(
+        usageResponse: JSONValue?,
+        redeemResponse: JSONValue?,
+        paymentResponse: JSONValue?,
+        limit: Int = 20
+    ) -> [BalanceActivity] {
+        let normalizedLimit = min(max(limit, 1), 100)
+        let activities = usageActivities(from: usageResponse)
+            + redeemActivities(from: redeemResponse)
+            + paymentActivities(from: paymentResponse)
+        return Array(
+            activities
+                .sorted { $0.createdAt > $1.createdAt }
+                .prefix(normalizedLimit)
+        )
+    }
+
+    /// 将每条调用的实际成本转换为负数余额变动，并保留核对所需的模型与性能数据。
+    private static func usageActivities(from response: JSONValue?) -> [BalanceActivity] {
+        guard let response else { return [] }
+        return UsageRecordParser.parsePage(response).records.map { record in
+            BalanceActivity(
+                createdAt: record.createdAt,
+                kind: .usage,
+                title: record.model,
+                detail: "模型调用",
+                amountChange: -max(record.actualCost, 0),
+                totalTokens: record.totalTokens,
+                durationMilliseconds: record.durationMilliseconds
+            )
+        }
+    }
+
+    /// 兑换历史只保留会改变余额的类型，排除并发数和订阅等非余额事件。
+    private static func redeemActivities(from response: JSONValue?) -> [BalanceActivity] {
+        guard let response else { return [] }
+        return responseArray(response, preferredKeys: ["items", "records", "list", "data"])
+            .compactMap { item in
+                guard let type = item.directValue(forKey: "type")?.stringValue,
+                      ["balance", "admin_balance", "affiliate_balance"].contains(type),
+                      let value = item.directValue(forKey: "value")?.doubleValue,
+                      let date = eventDate(item, preferredKeys: ["used_at", "created_at"]) else {
+                    return nil
+                }
+
+                let title: String
+                let detail: String
+                switch type {
+                case "balance":
+                    title = "兑换码充值"
+                    detail = "兑换记录"
+                case "affiliate_balance":
+                    title = value >= 0 ? "推广余额转入" : "推广余额转出"
+                    detail = "推广余额"
+                default:
+                    title = value >= 0 ? "管理员增加余额" : "管理员扣减余额"
+                    detail = "余额调整"
+                }
+
+                return BalanceActivity(
+                    createdAt: date,
+                    kind: type == "balance" ? .recharge : .adjustment,
+                    title: title,
+                    detail: detail,
+                    amountChange: value,
+                    totalTokens: nil,
+                    durationMilliseconds: nil
+                )
+            }
+    }
+
+    /// 支付订单仅把已完成的余额订单视为入账，忽略待支付、失败和订阅订单。
+    private static func paymentActivities(from response: JSONValue?) -> [BalanceActivity] {
+        guard let response else { return [] }
+        return responseArray(response, preferredKeys: ["items", "records", "list", "data"])
+            .compactMap { item in
+                guard item.directValue(forKey: "order_type")?.stringValue == "balance",
+                      item.directValue(forKey: "status")?.stringValue == "completed",
+                      let amount = item.directValue(forKey: "amount")?.doubleValue,
+                      let date = eventDate(
+                        item,
+                        preferredKeys: ["completed_at", "paid_at", "created_at"]
+                      ) else {
+                    return nil
+                }
+                let paymentType = item.directValue(forKey: "payment_type")?.stringValue
+                    .flatMap { $0.isEmpty ? nil : $0 }
+                return BalanceActivity(
+                    createdAt: date,
+                    kind: .recharge,
+                    title: "余额充值",
+                    detail: paymentType ?? "支付订单",
+                    amountChange: max(amount, 0),
+                    totalTokens: nil,
+                    durationMilliseconds: nil
+                )
+            }
+    }
+
+    /// 兼容响应直接为数组、`data` 数组或标准分页 `data.items` 三种结构。
+    private static func responseArray(_ response: JSONValue, preferredKeys: [String]) -> [JSONValue] {
+        if let directArray = response.arrayValue { return directArray }
+        for key in preferredKeys {
+            if let array = response.firstValue(forKeys: [key])?.arrayValue {
+                return array
+            }
+        }
+        return []
+    }
+
+    /// 按字段优先级读取事件时间，并兼容带毫秒和普通 ISO 8601 字符串。
+    private static func eventDate(_ item: JSONValue, preferredKeys: [String]) -> Date? {
+        for key in preferredKeys {
+            guard let value = item.directValue(forKey: key)?.stringValue else { continue }
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = fractional.date(from: value) { return date }
+
+            let standard = ISO8601DateFormatter()
+            standard.formatOptions = [.withInternetDateTime]
+            if let date = standard.date(from: value) { return date }
+        }
+        return nil
     }
 }
 
@@ -491,6 +653,7 @@ enum ConsumptionAnalyzer {
 /// 悬浮层和菜单栏摘要共同使用的只读状态快照。
 struct DashboardSnapshot: Codable, Sendable, Equatable {
     var balance: Double?
+    var concurrencyLimit: Double?
     var quotaUsed: Double?
     var quotaTotal: Double?
     var periodTokens: Double?
@@ -528,7 +691,7 @@ struct DashboardSnapshot: Codable, Sendable, Equatable {
 
 /// 把多个 Sub2API 接口结果整理成稳定的界面模型。
 enum DashboardParser {
-    /// 解析余额、订阅进度、周期用量和模型统计；每一部分都允许为空，避免单个接口异常拖垮整个面板。
+    /// 解析余额、并发上限、订阅进度、周期用量和模型统计；每一部分都允许为空，避免单个接口异常拖垮整个面板。
     static func parse(
         profile: JSONValue?,
         subscriptionSummary: JSONValue?,
@@ -539,6 +702,10 @@ enum DashboardParser {
         refreshedAt: Date = Date()
     ) -> DashboardSnapshot {
         let balance = number(in: profile, keys: ["balance", "available_balance", "current_balance"])
+        let concurrencyLimit = number(
+            in: profile,
+            keys: ["concurrency", "concurrency_limit", "max_concurrency"]
+        )
         let quotaTotal = number(
             in: subscriptionSummary,
             keys: ["quota", "total_quota", "quota_total", "limit", "amount"]
@@ -568,6 +735,7 @@ enum DashboardParser {
 
         return DashboardSnapshot(
             balance: balance,
+            concurrencyLimit: concurrencyLimit,
             quotaUsed: quotaUsed,
             quotaTotal: quotaTotal,
             periodTokens: periodTokens,

@@ -14,6 +14,7 @@ struct DashboardView: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage(PreferenceKey.displayTimeZone) private var displayTimeZone = TimeZone.current.identifier
     @AppStorage(PreferenceKey.consumptionAnalysisEnabled) private var consumptionAnalysisEnabled = true
+    @State private var showsBalanceActivities = false
 
     /// 通过标题栏、主内容和状态底栏形成稳定的三段式信息结构。
     var body: some View {
@@ -155,16 +156,39 @@ struct DashboardView: View {
                 Text("账户余额")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                Text(currency(snapshot.balance))
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-                    .foregroundStyle(balanceColor(snapshot.balance))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                Button {
+                    presentBalanceActivities()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(currency(snapshot.balance))
+                            .font(.system(size: 24, weight: .semibold, design: .rounded))
+                            .foregroundStyle(balanceColor(snapshot.balance))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("查看余额最近活动")
+                .accessibilityLabel("账户余额 \(currency(snapshot.balance))，查看最近活动")
+                .popover(isPresented: $showsBalanceActivities, arrowEdge: .trailing) {
+                    BalanceActivityView(balance: snapshot.balance)
+                        .environmentObject(appState)
+                }
 
                 Label(balanceState(snapshot.balance), systemImage: balanceStateIcon(snapshot.balance))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(balanceColor(snapshot.balance))
+
+                Label(
+                    "并发上限 \(UsageFormatter.concurrencyLimit(snapshot.concurrencyLimit))",
+                    systemImage: "rectangle.3.group"
+                )
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
             }
             .frame(width: 118, alignment: .leading)
 
@@ -205,6 +229,12 @@ struct DashboardView: View {
             RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
                 .stroke(AppTheme.border, lineWidth: 1)
         }
+    }
+
+    /// 打开余额活动弹窗，并并行读取最新的 Sub2API 入账、调整和调用扣费记录。
+    private func presentBalanceActivities() {
+        showsBalanceActivities = true
+        Task { await appState.loadBalanceActivities(force: true) }
     }
 
     /// 四项关键运营指标使用单层 2×2 网格，减少重复容器并提高横向比较效率。

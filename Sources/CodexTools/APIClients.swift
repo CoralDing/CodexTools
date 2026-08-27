@@ -178,6 +178,38 @@ struct Sub2APIClient: Sendable {
         return (collected, true)
     }
 
+    /// 并行读取调用、兑换和充值记录，再合并为普通用户可见的最近余额活动。
+    func fetchBalanceActivities(token: String, limit: Int = 20) async throws -> [BalanceActivity] {
+        let normalizedLimit = min(max(limit, 1), 100)
+        async let usage = optionalJSON(
+            path: "usage",
+            token: token,
+            query: [
+                "page": "1", "page_size": String(normalizedLimit),
+                "sort_by": "created_at", "sort_order": "desc"
+            ]
+        )
+        async let redeem = optionalJSON(path: "redeem/history", token: token)
+        async let payments = optionalJSON(
+            path: "payment/orders/my",
+            token: token,
+            query: [
+                "page": "1", "page_size": String(normalizedLimit),
+                "status": "completed", "order_type": "balance"
+            ]
+        )
+        let responses = await (usage, redeem, payments)
+        guard [responses.0, responses.1, responses.2].contains(where: { $0 != nil }) else {
+            throw CodexToolsError.invalidResponse
+        }
+        return BalanceActivityParser.parse(
+            usageResponse: responses.0,
+            redeemResponse: responses.1,
+            paymentResponse: responses.2,
+            limit: normalizedLimit
+        )
+    }
+
     /// 对非关键统计接口执行宽容请求，失败时返回空值而不是中断整个悬浮层刷新。
     private func optionalJSON(path: String, token: String, query: [String: String] = [:]) async -> JSONValue? {
         try? await request(path: path, method: "GET", token: token, query: query, body: nil)

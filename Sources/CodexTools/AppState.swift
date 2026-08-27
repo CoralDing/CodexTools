@@ -18,6 +18,9 @@ final class AppState: ObservableObject {
     @Published private(set) var consumptionAnalysis: ConsumptionAnalysis?
     @Published private(set) var isAnalyzingConsumption = false
     @Published private(set) var consumptionAnalysisErrorMessage: String?
+    @Published private(set) var balanceActivities: [BalanceActivity] = []
+    @Published private(set) var isLoadingBalanceActivities = false
+    @Published private(set) var balanceActivityErrorMessage: String?
     @Published private(set) var isLoading = false
     @Published private(set) var usagePeriod: UsagePeriod
     @Published var errorMessage: String?
@@ -55,6 +58,7 @@ final class AppState: ObservableObject {
             )
             snapshot = previewSnapshot
             consumptionAnalysis = Self.makeQAPreviewConsumptionAnalysis()
+            balanceActivities = Self.makeQAPreviewBalanceActivities()
             return
         }
 
@@ -78,6 +82,7 @@ final class AppState: ObservableObject {
     static func makeQAPreviewSnapshot() -> DashboardSnapshot {
         DashboardSnapshot(
             balance: 18.42,
+            concurrencyLimit: 10,
             quotaUsed: 320,
             quotaTotal: 500,
             periodTokens: 1_284_620,
@@ -117,6 +122,49 @@ final class AppState: ObservableObject {
             inconsistentRequestCount: 0,
             isTruncated: false
         )
+    }
+
+    /// 创建不含账户标识的固定余额活动，用于弹窗截图和行布局检查。
+    static func makeQAPreviewBalanceActivities() -> [BalanceActivity] {
+        let formatter = ISO8601DateFormatter()
+        return [
+            BalanceActivity(
+                createdAt: formatter.date(from: "2026-08-26T01:28:00Z")!,
+                kind: .usage,
+                title: "gpt-5.6-sol",
+                detail: "模型调用",
+                amountChange: -0.688,
+                totalTokens: 248_620,
+                durationMilliseconds: 1_286
+            ),
+            BalanceActivity(
+                createdAt: formatter.date(from: "2026-08-26T01:06:00Z")!,
+                kind: .recharge,
+                title: "余额充值",
+                detail: "支付宝",
+                amountChange: 20,
+                totalTokens: nil,
+                durationMilliseconds: nil
+            ),
+            BalanceActivity(
+                createdAt: formatter.date(from: "2026-08-25T15:42:00Z")!,
+                kind: .usage,
+                title: "gpt-5.2-codex",
+                detail: "模型调用",
+                amountChange: -0.064,
+                totalTokens: 16_820,
+                durationMilliseconds: 610
+            ),
+            BalanceActivity(
+                createdAt: formatter.date(from: "2026-08-25T13:15:00Z")!,
+                kind: .adjustment,
+                title: "管理员增加余额",
+                detail: "余额调整",
+                amountChange: 5,
+                totalTokens: nil,
+                durationMilliseconds: nil
+            )
+        ]
     }
 
     /// 创建不含真实账户信息的两步验证示例，避免视觉检查依赖用户密码或临时令牌。
@@ -251,7 +299,37 @@ final class AppState: ObservableObject {
         snapshot = nil
         consumptionAnalysis = nil
         consumptionAnalysisErrorMessage = nil
+        balanceActivities = []
+        balanceActivityErrorMessage = nil
+        isLoadingBalanceActivities = false
         UserDefaults.standard.removeObject(forKey: PreferenceKey.consumptionAnalysisSnapshot)
+    }
+
+    /// 按需读取最近余额变动；列表只保留在内存中，避免持久化逐条账户活动。
+    func loadBalanceActivities(force: Bool = false) async {
+        guard !isLoadingBalanceActivities else { return }
+        if !force, !balanceActivities.isEmpty { return }
+        guard var activeSession = session else { return }
+
+        isLoadingBalanceActivities = true
+        balanceActivityErrorMessage = nil
+        defer { isLoadingBalanceActivities = false }
+
+        do {
+            var client = try Sub2APIClient(serverURL: activeSession.serverURL)
+            if activeSession.needsRefresh() {
+                activeSession = try await client.refresh(session: activeSession)
+                try keychain.save(activeSession)
+                session = activeSession
+                client = try Sub2APIClient(serverURL: activeSession.serverURL)
+            }
+            balanceActivities = try await client.fetchBalanceActivities(
+                token: activeSession.accessToken
+            )
+        } catch {
+            // 保留上次成功结果，让短暂网络故障只显示提示而不会清空活动列表。
+            balanceActivityErrorMessage = error.localizedDescription
+        }
     }
 
     /// 保存最终会话并执行首次同步，确保普通登录和两步验证行为一致。

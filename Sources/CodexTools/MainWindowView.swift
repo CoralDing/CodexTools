@@ -66,6 +66,7 @@ struct MainWindowView: View {
     @AppStorage(PreferenceKey.displayTimeZone) private var displayTimeZone = TimeZone.current.identifier
     @AppStorage(PreferenceKey.consumptionAnalysisEnabled) private var consumptionAnalysisEnabled = true
     @State private var selection: MainWindowSection = .overview
+    @State private var showsBalanceActivities = false
 
     /// 左侧使用可控的系统玻璃材质，避免离屏渲染和不同系统版本出现侧栏底色漂移。
     var body: some View {
@@ -380,13 +381,36 @@ struct MainWindowView: View {
                 Text("可用余额")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                Text(currency(snapshot.balance))
-                    .font(.system(size: 32, weight: .semibold, design: .rounded))
-                    .foregroundStyle(balanceColor(snapshot.balance))
-                    .monospacedDigit()
-                Label(balanceState(snapshot.balance), systemImage: balanceStateIcon(snapshot.balance))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(balanceColor(snapshot.balance))
+                Button {
+                    presentBalanceActivities()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(currency(snapshot.balance))
+                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .foregroundStyle(balanceColor(snapshot.balance))
+                            .monospacedDigit()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("查看余额最近活动")
+                .accessibilityLabel("可用余额 \(currency(snapshot.balance))，查看最近活动")
+                .popover(isPresented: $showsBalanceActivities, arrowEdge: .trailing) {
+                    BalanceActivityView(balance: snapshot.balance)
+                        .environmentObject(appState)
+                }
+                HStack(spacing: 14) {
+                    Label(balanceState(snapshot.balance), systemImage: balanceStateIcon(snapshot.balance))
+                        .foregroundStyle(balanceColor(snapshot.balance))
+                    Label(
+                        "并发上限 \(UsageFormatter.concurrencyLimit(snapshot.concurrencyLimit))",
+                        systemImage: "rectangle.3.group"
+                    )
+                    .foregroundStyle(.secondary)
+                }
+                .font(.system(size: 11, weight: .medium))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -418,6 +442,12 @@ struct MainWindowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .panelSurface(padding: 20)
+    }
+
+    /// 打开余额活动弹窗，并立即从 Sub2API 请求最近的余额变动记录。
+    private func presentBalanceActivities() {
+        showsBalanceActivities = true
+        Task { await appState.loadBalanceActivities(force: true) }
     }
 
     /// 四项指标放在同一容器中通过分隔线组织，避免形成重复卡片网格。
