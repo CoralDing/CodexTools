@@ -97,8 +97,9 @@ struct MainWindowRootView: View {
                 ZStack {
                     SubPilotWindowBackdrop()
                     LoginView()
-                        .frame(width: 380)
-                        .glassSurface(radius: 14, addsShadow: true)
+                        // 主窗口会向子视图提供全部可用高度；固定登录卡高度，避免内部 Spacer 把按钮推到窗口底部。
+                        .frame(width: 380, height: 480)
+                        .glassSurface(radius: 14, tint: AppTheme.floatingGlassTint, addsShadow: true)
                 }
             } else {
                 MainWindowView()
@@ -129,7 +130,7 @@ struct MainWindowView: View {
             SubPilotWindowBackdrop()
             HStack(spacing: 0) {
                 sidebar
-                    .frame(width: 218)
+                    .frame(width: AppTheme.sidebarWidth)
                 Rectangle()
                     .fill(AppTheme.strongBorder)
                     .frame(width: 0.5)
@@ -162,9 +163,9 @@ struct MainWindowView: View {
                     .font(.system(size: 18, weight: .semibold))
                 Spacer()
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
 
             VStack(spacing: 4) {
                 ForEach(MainWindowSection.accountSections) { section in
@@ -209,7 +210,7 @@ struct MainWindowView: View {
                     Spacer()
                 }
             }
-            .padding(16)
+            .padding(14)
         }
         .glassChromeSurface()
     }
@@ -232,7 +233,7 @@ struct MainWindowView: View {
             .padding(.horizontal, 12)
             .frame(height: 38)
             .background(
-                selection == section ? AppTheme.accent.opacity(0.15) : Color.clear,
+                selection == section ? AppTheme.selectedSurface : Color.clear,
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
             )
             .overlay {
@@ -255,11 +256,11 @@ struct MainWindowView: View {
                     if selection == .usage {
                         // 使用记录包含独立长列表，让列表自己滚动才能真正按需创建可见行。
                         UsageRecordsPortalView()
-                            .padding(18)
+                            .padding(AppTheme.compactContentPadding)
                     } else {
                         ScrollView {
                             selectedContent(snapshot)
-                                .padding(18)
+                                .padding(AppTheme.compactContentPadding)
                         }
                     }
                 }
@@ -289,9 +290,9 @@ struct MainWindowView: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(selection.title)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(AppTheme.pageTitleFont)
                 Text(pageSubtitle(snapshot))
-                    .font(.system(size: 12))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -300,11 +301,11 @@ struct MainWindowView: View {
 
             if selection == .overview || selection == .usage {
                 periodSelector
-                    .frame(width: 210)
+                    .frame(width: 184)
             }
 
             Text("更新 \(formattedTime(snapshot.refreshedAt))")
-                .font(.system(size: 12))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
 
@@ -321,8 +322,8 @@ struct MainWindowView: View {
             .help("刷新数据")
             .disabled(appState.isLoading || appState.isLoadingPortal)
         }
-        .padding(.horizontal, 26)
-        .frame(height: 72)
+        .padding(.horizontal, 20)
+        .frame(height: AppTheme.pageHeaderHeight)
         .glassChromeSurface()
     }
 
@@ -352,27 +353,22 @@ struct MainWindowView: View {
         }
     }
 
-    /// 概览按账户、运营指标、分布、趋势和状态从上到下组织，覆盖日常核对所需完整信息。
+    /// 概览保留一个主趋势、一个模型侧栏和一个平台表格，避免多个同权面板形成卡片墙。
     private func overviewContent(_ snapshot: DashboardSnapshot) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             accountSummary(snapshot)
             metricStrip(snapshot)
 
-            HStack(alignment: .top, spacing: 14) {
-                platformDistributionPanel
-                    .frame(maxWidth: .infinity)
-                modelDistributionPanel
-                    .frame(maxWidth: .infinity)
-            }
-
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
                 overviewTrendPanel
                     .frame(maxWidth: .infinity)
-                recentUsagePanel
-                    .frame(width: 350)
+                modelDistributionPanel
+                    .frame(width: 320)
             }
 
-            HStack(alignment: .top, spacing: 14) {
+            platformDistributionPanel
+
+            HStack(alignment: .top, spacing: 12) {
                 if consumptionAnalysisEnabled {
                     compactAnalysisPanel
                         .frame(maxWidth: .infinity)
@@ -495,15 +491,15 @@ struct MainWindowView: View {
         HStack(spacing: 24) {
             VStack(alignment: .leading, spacing: 7) {
                 Text("可用余额")
-                    .font(.system(size: 12))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                 Button {
                     presentBalanceActivities()
                 } label: {
                     HStack(spacing: 6) {
                         Text(currency(snapshot.balance))
-                            .font(.system(size: 32, weight: .semibold, design: .rounded))
-                            .foregroundStyle(balanceColor(snapshot.balance))
+                            .font(.system(size: 30, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary)
                             .monospacedDigit()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
@@ -526,7 +522,7 @@ struct MainWindowView: View {
                     )
                     .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 11, weight: .medium))
+                .font(AppTheme.captionFont.weight(.medium))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -543,11 +539,9 @@ struct MainWindowView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("\(snapshot.primaryPlatformQuota?.displayName ?? "订阅") 平台额度")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AppTheme.sectionTitleFont)
                 Spacer()
-                Label("已连接", systemImage: "circle.fill")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(AppTheme.accent)
+                AppStatusLabel(title: "已连接", color: AppTheme.success)
             }
 
             if let quota = snapshot.primaryPlatformQuota,
@@ -582,7 +576,7 @@ struct MainWindowView: View {
                 .tint(quotaTint(window.progress))
                 .controlSize(.small)
             Text("\(formattedQuotaReset(window.resetsAt)) 重置 · \(selectedTimeZone.identifier)")
-                .font(.system(size: 9))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -600,7 +594,7 @@ struct MainWindowView: View {
             .font(.system(size: 11))
             quotaProgressBar(snapshot.quotaProgress)
             Text(snapshot.resetAt.map { "\($0) 重置 · \(selectedTimeZone.identifier)" } ?? "暂未配置额度")
-                .font(.system(size: 9))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
         }
     }
@@ -637,52 +631,46 @@ struct MainWindowView: View {
         Task { await appState.loadBalanceActivities(force: true) }
     }
 
-    /// 六项指标放在同一容器中，RPM 和 TPM 使用最近五分钟真实调用计算。
+    /// 六项高频指标共用一个连续轨道；并发上限已在账户摘要展示，这里保留 RPM 与 TPM 运行速率。
     private func metricStrip(_ snapshot: DashboardSnapshot) -> some View {
-        HStack(spacing: 0) {
-            mainMetric(
+        AppMetricRail(items: [
+            AppMetricItem(
                 icon: "textformat.123",
                 title: "Token",
                 value: UsageFormatter.compactTokens(snapshot.periodTokens),
                 detail: snapshot.usagePeriod.metricTitle
-            )
-            metricDivider
-            mainMetric(
+            ),
+            AppMetricItem(
                 icon: "arrow.up.arrow.down",
                 title: "请求",
                 value: UsageFormatter.requestCount(snapshot.requestCount),
                 detail: "模型调用记录"
-            )
-            metricDivider
-            mainMetric(
+            ),
+            AppMetricItem(
                 icon: "dollarsign",
-                title: "消费",
+                title: "实际消费",
                 value: UsageFormatter.cost(snapshot.usageCost),
                 detail: "中转实际扣费"
-            )
-            metricDivider
-            mainMetric(
+            ),
+            AppMetricItem(
                 icon: "timer",
                 title: "平均响应",
                 value: UsageFormatter.duration(milliseconds: snapshot.averageResponseMilliseconds),
                 detail: "服务端记录"
-            )
-            metricDivider
-            mainMetric(
+            ),
+            AppMetricItem(
                 icon: "gauge.with.dots.needle.33percent",
                 title: "RPM",
                 value: recentRPM.formatted(.number.precision(.fractionLength(0...1))),
                 detail: "近 5 分钟"
-            )
-            metricDivider
-            mainMetric(
-                icon: "speedometer",
+            ),
+            AppMetricItem(
+                icon: "gauge.with.dots.needle.67percent",
                 title: "TPM",
                 value: UsageFormatter.compactTokens(recentTPM),
                 detail: "近 5 分钟"
             )
-        }
-        .panelSurface(padding: 0)
+        ])
     }
 
     /// 单个主指标固定布局，长数值缩放而不会推动相邻列变化。
@@ -738,25 +726,29 @@ struct MainWindowView: View {
                 Text("消费").frame(width: 70, alignment: .trailing)
                 Text("平均响应").frame(width: 72, alignment: .trailing)
             }
-            .font(.system(size: 9, weight: .medium))
+            .font(AppTheme.captionFont.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .frame(height: 32)
             .background(AppTheme.tableHeader)
             ForEach(platformSummaries.prefix(4)) { item in
                 HStack(spacing: 8) {
-                    Label(item.platform, systemImage: "circle.fill")
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(AppTheme.accent)
+                            .frame(width: 7, height: 7)
+                        Text(item.platform)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Text(UsageFormatter.compactTokens(item.tokens)).frame(width: 68, alignment: .trailing)
                     Text(item.requests.formatted()).frame(width: 52, alignment: .trailing)
                     Text(UsageFormatter.cost(item.cost)).frame(width: 70, alignment: .trailing)
                     Text(UsageFormatter.duration(milliseconds: item.averageResponse)).frame(width: 72, alignment: .trailing)
                 }
-                .font(.system(size: 10))
+                .font(AppTheme.bodyFont)
                 .monospacedDigit()
                 .padding(.horizontal, 14)
-                .frame(height: 34)
+                .frame(height: 40)
                 Divider().padding(.leading, 14)
             }
             if platformSummaries.isEmpty {
@@ -788,13 +780,13 @@ struct MainWindowView: View {
                     .cornerRadius(2)
                     .annotation(position: .trailing) {
                         Text(UsageFormatter.compactTokens(item.tokens))
-                            .font(.system(size: 8))
+                            .font(AppTheme.captionFont)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis { AxisMarks(position: .leading) }
-                .frame(height: 136)
+                .frame(height: 176)
                 .padding(.horizontal, 14)
                 .padding(.bottom, 10)
             }
@@ -810,7 +802,7 @@ struct MainWindowView: View {
                 Text("暂无趋势数据")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 150)
+                    .frame(maxWidth: .infinity, minHeight: 188)
             } else {
                 Chart(overviewTrendRecords) { record in
                     LineMark(
@@ -828,7 +820,7 @@ struct MainWindowView: View {
                 }
                 .chartYAxis { AxisMarks(position: .leading) }
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) }
-                .frame(height: 150)
+                .frame(height: 188)
                 .padding(12)
             }
         }
@@ -866,15 +858,9 @@ struct MainWindowView: View {
         .panelSurface(padding: 0)
     }
 
-    /// 所有数据面板使用相同标题栏，避免页面出现不同的标题高度和分隔风格。
+    /// 所有数据面板复用同一标题组件，避免页面出现不同的标题高度和文字层级。
     private func sectionBar(_ title: String, trailing: String) -> some View {
-        HStack {
-            Text(title).font(.system(size: 12, weight: .semibold))
-            Spacer()
-            Text(trailing).font(.system(size: 9)).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 38)
+        AppSectionHeader(title: title, trailing: trailing)
     }
 
     /// 最近五分钟速率以最新一条账单为窗口终点，离线预览和真实数据都能稳定复现。
@@ -1224,7 +1210,7 @@ struct MainWindowView: View {
 
     /// 连接状态只在错误时使用警示色，其余延续品牌强调色。
     private var sidebarStatusColor: Color {
-        appState.errorMessage == nil ? AppTheme.accent : AppTheme.warning
+        appState.errorMessage == nil ? AppTheme.success : AppTheme.warning
     }
 
     /// 使用稳定高度的进度条，并标记用户设置的剩余额度阈值。
@@ -1272,7 +1258,7 @@ struct MainWindowView: View {
         guard let value else { return .secondary }
         return value <= UserDefaults.standard.double(forKey: PreferenceKey.balanceThreshold)
             ? AppTheme.warning
-            : AppTheme.accent
+            : AppTheme.success
     }
 
     /// 将额度比例格式化为整数百分比。

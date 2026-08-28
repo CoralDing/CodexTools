@@ -105,20 +105,22 @@ private struct MenuBarStatusLabel: View {
 /// 把系统图标与一至两行指标绘制成模板图像，保证 macOS 菜单栏不会裁掉第二行。
 private enum MenuBarStatusImage {
     private static let imageHeight: CGFloat = 24
-    private static let iconSize: CGFloat = 18
-    private static let contentSpacing: CGFloat = 4
+    private static let iconSize: CGFloat = 19
+    private static let contentSpacing: CGFloat = 5
+    private static let minimumTextWidth: CGFloat = 44
 
     /// 根据启用的指标生成紧凑图像；模板模式会让系统自动适配浅色、深色和按下状态。
     static func make(token: String?, cost: String?) -> NSImage {
         let lines = [token, cost].compactMap { $0 }
-        let fontSize: CGFloat = lines.count > 1 ? 10 : 11
-        let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
+        let fontSize: CGFloat = lines.count > 1 ? 10.5 : 12
+        let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: lines.count > 1 ? .medium : .semibold)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: NSColor.black
         ]
         let lineSizes = lines.map { ($0 as NSString).size(withAttributes: attributes) }
-        let textWidth = ceil(lineSizes.map(\.width).max() ?? 0)
+        // 稳定的最小文字宽度避免 Token 或金额变化时菜单栏状态项持续左右跳动。
+        let textWidth = max(ceil(lineSizes.map(\.width).max() ?? 0), minimumTextWidth)
         let imageWidth = ceil(iconSize + contentSpacing + textWidth)
 
         let image = NSImage(
@@ -155,7 +157,7 @@ private enum MenuBarStatusImage {
         )
     }
 
-    /// 两项指标分别贴近上下边缘；单项指标则在 24 点画布内垂直居中。
+    /// 两项指标围绕画布中线排布并留出上下呼吸空间；单项指标保持垂直居中。
     private static func drawLines(
         _ lines: [String],
         sizes: [NSSize],
@@ -169,9 +171,10 @@ private enum MenuBarStatusImage {
             return
         }
 
-        // AppKit 坐标从左下角开始，所以消费位于下排，Token 位于上排。
-        let bottomY: CGFloat = 0
-        let topY = imageHeight - sizes[0].height
+        // AppKit 坐标从左下角开始；两条基线以 0.5pt 间距整体居中，避免贴住菜单栏边缘。
+        let combinedHeight = sizes[0].height + sizes[1].height + 0.5
+        let bottomY = max((imageHeight - combinedHeight) / 2, 0)
+        let topY = bottomY + sizes[1].height + 0.5
         (lines[0] as NSString).draw(at: NSPoint(x: textOriginX, y: topY), withAttributes: attributes)
         (lines[1] as NSString).draw(at: NSPoint(x: textOriginX, y: bottomY), withAttributes: attributes)
     }

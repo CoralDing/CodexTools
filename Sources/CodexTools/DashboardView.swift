@@ -16,14 +16,17 @@ struct DashboardView: View {
     @AppStorage(PreferenceKey.consumptionAnalysisEnabled) private var consumptionAnalysisEnabled = true
     @State private var showsBalanceActivities = false
 
-    /// 通过标题栏、主内容和状态底栏形成稳定的三段式信息结构。
+    /// 通过固定标题栏、可滚动数据区和命令底栏形成稳定结构，小屏幕也不会裁掉低频操作。
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
 
             if let snapshot = appState.snapshot {
-                content(snapshot)
+                ScrollView {
+                    content(snapshot)
+                }
+                .scrollIndicators(.visible)
             } else if appState.isLoading {
                 loadingState
             } else {
@@ -33,27 +36,35 @@ struct DashboardView: View {
             Divider()
             footer
         }
-        .frame(minHeight: 740)
-        .background(.ultraThinMaterial)
+        .frame(height: 680)
+        .background(Color.clear)
     }
 
-    /// 标题栏保留产品名、主窗口和刷新命令，完整操作从菜单面板自然过渡到主窗口。
+    /// 标题栏把最近模型和连接状态合并到品牌旁，仅保留高频刷新命令。
     private var header: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                SubPilotBrandIcon(size: 24)
-                Text("SubPilot")
-                    .font(.system(size: 17, weight: .semibold))
+        HStack(spacing: 10) {
+            SubPilotBrandIcon(size: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 7) {
+                    Text("SubPilot")
+                        .font(.system(size: 16, weight: .semibold))
+                    AppStatusLabel(title: connectionStatusText, color: connectionStatusColor)
+                }
+                Text(appState.snapshot?.recentModel ?? "等待模型调用")
+                    .font(AppTheme.captionFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+
             Spacer()
 
-            Button {
-                openMainWindow()
-            } label: {
-                Image(systemName: "macwindow")
+            if let refreshedAt = appState.snapshot?.refreshedAt {
+                Text(formattedTime(refreshedAt))
+                    .font(AppTheme.captionFont)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            .buttonStyle(ToolbarIconButtonStyle())
-            .help("打开主窗口")
 
             Button {
                 Task { await appState.refresh() }
@@ -63,26 +74,14 @@ struct DashboardView: View {
             .buttonStyle(ToolbarIconButtonStyle())
             .help("刷新数据")
             .disabled(appState.isLoading)
-
-            Button {
-                // 独立设置窗口不会依赖菜单栏悬浮层的生命周期，控件交互时可持续保持打开。
-                openSettings()
-                NSApplication.shared.activate(ignoringOtherApps: true)
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(ToolbarIconButtonStyle())
-            .help("打开应用设置")
         }
         .padding(.horizontal, 16)
         .frame(height: 58)
-        .background(.ultraThinMaterial)
     }
 
-    /// 主内容按连接、周期、账户、运营指标和重置时间排列，支持从上到下快速扫描。
+    /// 主内容按统计口径、账户额度、关键指标和低频状态排列，取消重复描边卡片。
     private func content(_ snapshot: DashboardSnapshot) -> some View {
-        VStack(spacing: 12) {
-            modelStatus(snapshot)
+        VStack(spacing: 14) {
             periodSelector
             accountOverview(snapshot)
             usageMetrics(snapshot)
@@ -92,7 +91,7 @@ struct DashboardView: View {
             resetList(snapshot)
         }
         .padding(16)
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     /// 原生分段控件明确当前统计口径，切换后立即刷新面板和菜单栏摘要。
@@ -115,101 +114,60 @@ struct DashboardView: View {
         .accessibilityLabel("统计周期")
     }
 
-    /// 最近模型与连接状态使用单行状态轨道，便于用户快速确认数据来源是否正常。
-    private func modelStatus(_ snapshot: DashboardSnapshot) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "cpu")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.accent)
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("最近使用模型")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                Text(snapshot.recentModel ?? "暂无模型记录")
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(AppTheme.accent)
-                    .frame(width: 7, height: 7)
-                Text("已连接")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 48)
-        .glassSurface()
-    }
-
-    /// 余额与订阅额度并排展示，构成面板唯一的强视觉焦点。
+    /// 余额与订阅额度纵向排列，窄浮层中的文字和进度条都能保持完整宽度。
     private func accountOverview(_ snapshot: DashboardSnapshot) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("账户余额")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Button {
-                    presentBalanceActivities()
-                } label: {
-                    HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 14) {
+            Button {
+                presentBalanceActivities()
+            } label: {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("账户余额")
+                            .font(AppTheme.captionFont)
+                            .foregroundStyle(.secondary)
                         Text(currency(snapshot.balance))
-                            .font(.system(size: 24, weight: .semibold, design: .rounded))
-                            .foregroundStyle(balanceColor(snapshot.balance))
+                            .font(.system(size: 26, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary)
                             .monospacedDigit()
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Label(balanceState(snapshot.balance), systemImage: balanceStateIcon(snapshot.balance))
+                            .font(AppTheme.captionFont.weight(.medium))
+                            .foregroundStyle(balanceColor(snapshot.balance))
+                        Text("查看余额增加记录")
+                            .font(AppTheme.captionFont)
                             .foregroundStyle(.secondary)
                     }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
                 }
-                .buttonStyle(.plain)
-                .help("查看余额增加记录")
-                .accessibilityLabel("账户余额 \(currency(snapshot.balance))，查看余额增加记录")
-                .popover(isPresented: $showsBalanceActivities, arrowEdge: .trailing) {
-                    BalanceActivityView(balance: snapshot.balance)
-                        .environmentObject(appState)
-                }
-
-                Label(balanceState(snapshot.balance), systemImage: balanceStateIcon(snapshot.balance))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(balanceColor(snapshot.balance))
-
-                Label(
-                    "并发上限 \(UsageFormatter.concurrencyLimit(snapshot.concurrencyLimit))",
-                    systemImage: "rectangle.3.group"
-                )
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
             }
-            .frame(width: 118, alignment: .leading)
+            .buttonStyle(.plain)
+            .help("查看余额增加记录")
+            .accessibilityLabel("账户余额 \(currency(snapshot.balance))，查看余额增加记录")
+            .popover(isPresented: $showsBalanceActivities, arrowEdge: .trailing) {
+                BalanceActivityView(balance: snapshot.balance)
+                    .environmentObject(appState)
+            }
 
             Divider()
-                .frame(height: snapshot.primaryPlatformQuota == nil ? 88 : 132)
 
             dashboardQuotaSummary(snapshot)
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
-        .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                .stroke(AppTheme.border, lineWidth: 1)
-        }
+        .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
     }
 
     /// 菜单栏面板使用两条紧凑额度行，数据口径与主窗口完全一致。
     private func dashboardQuotaSummary(_ snapshot: DashboardSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("\(snapshot.primaryPlatformQuota?.displayName ?? "订阅") 平台额度")
-                .font(.system(size: 11, weight: .semibold))
+                .font(AppTheme.bodyEmphasizedFont)
 
             if let quota = snapshot.primaryPlatformQuota,
                quota.weekly != nil || quota.monthly != nil {
@@ -225,7 +183,7 @@ struct DashboardView: View {
                     Spacer()
                     Text("共 \(currency(snapshot.quotaTotal))")
                 }
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 quotaProgressBar(snapshot.quotaProgress)
             }
@@ -237,10 +195,10 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(title)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(AppTheme.captionFont.weight(.medium))
                 Spacer()
                 Text("\(UsageFormatter.cost(window.used)) / \(UsageFormatter.cost(window.limit))")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(AppTheme.captionFont.weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -249,7 +207,7 @@ struct DashboardView: View {
                 .tint((window.progress ?? 0) >= 0.9 ? AppTheme.warning : AppTheme.accent)
                 .controlSize(.mini)
             Text("\(formattedQuotaReset(window.resetsAt)) · \(selectedTimeZone.identifier)")
-                .font(.system(size: 8))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
@@ -279,7 +237,7 @@ struct DashboardView: View {
         Task { await appState.loadBalanceActivities(force: true) }
     }
 
-    /// 四项关键运营指标使用单层 2×2 网格，减少重复容器并提高横向比较效率。
+    /// 两项主指标与三项辅助指标共用一个连续表面，窄浮层中优先保证数字可读。
     private func usageMetrics(_ snapshot: DashboardSnapshot) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -288,53 +246,68 @@ struct DashboardView: View {
                     title: "\(snapshot.usagePeriod.metricTitle) Token",
                     value: UsageFormatter.compactTokens(snapshot.periodTokens)
                 )
-                Divider().frame(height: 57)
+                Divider().frame(height: 48)
                 usageMetric(
-                    icon: "arrow.up.arrow.down",
-                    title: "\(snapshot.usagePeriod.metricTitle)请求",
-                    value: UsageFormatter.requestCount(snapshot.requestCount)
+                    icon: "dollarsign",
+                    title: "\(snapshot.usagePeriod.metricTitle)消费",
+                    value: UsageFormatter.cost(snapshot.usageCost)
                 )
             }
 
             Divider()
 
             HStack(spacing: 0) {
-                usageMetric(
-                    icon: "dollarsign",
-                    title: "\(snapshot.usagePeriod.metricTitle)消费",
-                    value: UsageFormatter.cost(snapshot.usageCost)
+                compactUsageMetric(
+                    title: "请求",
+                    value: UsageFormatter.requestCount(snapshot.requestCount)
                 )
-                Divider().frame(height: 57)
-                usageMetric(
-                    icon: "timer",
+                Divider().frame(height: 36)
+                compactUsageMetric(
                     title: "平均响应",
                     value: UsageFormatter.duration(milliseconds: snapshot.averageResponseMilliseconds)
                 )
+                Divider().frame(height: 36)
+                compactUsageMetric(
+                    title: "并发上限",
+                    value: UsageFormatter.concurrencyLimit(snapshot.concurrencyLimit)
+                )
             }
         }
-        .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                .stroke(AppTheme.border, lineWidth: 1)
-        }
+        .panelSurface(padding: 0)
     }
 
     /// 单个运营指标固定最小高度和等分宽度，数据变化不会推动相邻指标位移。
     private func usageMetric(icon: String, title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: icon)
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
             Text(value)
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .font(.system(size: 19, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
         .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 67, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+    }
+
+    /// 辅助指标用三列紧凑布局，减少菜单浮层纵向滚动且保留完整文字语义。
+    private func compactUsageMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(AppTheme.captionFont)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
     }
 
     /// 每小时分析面板明确区分本地标准成本与中转实扣，并允许用户手动复查。
@@ -346,11 +319,11 @@ struct DashboardView: View {
                     .foregroundStyle(analysisColor)
 
                 Text("消耗分析")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AppTheme.sectionTitleFont)
 
                 if let analysis = appState.consumptionAnalysis {
                     Text(analysisStatusTitle(analysis.status))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(AppTheme.captionFont.weight(.medium))
                         .foregroundStyle(analysisColor)
                 }
 
@@ -378,7 +351,7 @@ struct DashboardView: View {
 
             if let analysis = appState.consumptionAnalysis {
                 Text(analysis.message)
-                    .font(.system(size: 11))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -387,7 +360,7 @@ struct DashboardView: View {
                     Text("中转实扣 \(UsageFormatter.cost(analysis.actualCost))")
                     Text("/ 本地估算 \(UsageFormatter.cost(analysis.standardCost))")
                 }
-                .font(.system(size: 9))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
 
@@ -399,12 +372,12 @@ struct DashboardView: View {
                     Spacer()
                     Text(formattedTime(analysis.analyzedAt))
                 }
-                .font(.system(size: 9))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             } else {
                 Text(appState.consumptionAnalysisErrorMessage ?? "等待首次分析最近 1 小时调用")
-                    .font(.system(size: 11))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -412,11 +385,7 @@ struct DashboardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(minHeight: 86)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                .stroke(AppTheme.border, lineWidth: 1)
-        }
+        .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
     }
 
     /// 根据分析结论选择颜色；正常使用强调色，需关注使用警示色，其余保持次级层级。
@@ -469,11 +438,7 @@ struct DashboardView: View {
             .buttonStyle(.plain)
             .help(snapshot.resetSourceURL == nil ? "暂未同步来源" : "打开社区公告来源")
         }
-        .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                .stroke(AppTheme.border, lineWidth: 1)
-        }
+        .panelSurface(padding: 0)
     }
 
     /// 指标行使用固定图标列和右对齐数值，保证长短内容都容易扫描。
@@ -491,19 +456,19 @@ struct DashboardView: View {
                 .frame(width: 18)
 
             Text(title)
-                .font(.system(size: 12))
+                .font(AppTheme.bodyFont)
 
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppTheme.bodyEmphasizedFont)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
                 if let detail {
                     Text(detail)
-                        .font(.system(size: 9))
+                        .font(AppTheme.captionFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -561,23 +526,17 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// 底栏同时反馈同步结果、更新时间和低频账户菜单。
+    /// 底栏保留三个清晰命令，避免用户在小图标中猜测主窗口、设置和账户操作。
     private var footer: some View {
-        HStack(spacing: 8) {
-            Label(footerStatusText, systemImage: footerStatusIcon)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(footerStatusColor)
-                .help(appState.errorMessage ?? footerStatusText)
-
-            Spacer()
-
-            if let refreshedAt = appState.snapshot?.refreshedAt {
-                Text("更新 \(formattedTime(refreshedAt))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+        HStack(spacing: 0) {
+            footerCommand(title: "打开主界面", icon: "macwindow", action: openMainWindow)
+            Divider().frame(height: 24)
+            footerCommand(title: "设置", icon: "gearshape") {
+                // 设置使用独立窗口，激活应用后即使菜单浮层关闭也能继续编辑。
+                openSettings()
+                NSApplication.shared.activate(ignoringOtherApps: true)
             }
-
+            Divider().frame(height: 24)
             Menu {
                 Button("退出登录", role: .destructive, action: appState.logout)
                 Divider()
@@ -585,18 +544,28 @@ struct DashboardView: View {
                     NSApplication.shared.terminate(nil)
                 }
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 20, height: 20)
+                Label("账户", systemImage: "person.crop.circle")
+                    .font(AppTheme.bodyEmphasizedFont)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .frame(width: 24)
-            .help("更多操作")
+            .frame(maxWidth: .infinity)
+            .help("账户与退出操作")
         }
-        .padding(.horizontal, AppTheme.contentPadding)
-        .frame(height: 43)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 8)
+        .frame(height: 50)
+    }
+
+    /// 底栏普通命令使用图标加文字并等分宽度，点击区域在菜单栏浮层中保持足够大。
+    private func footerCommand(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(AppTheme.bodyEmphasizedFont)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     /// 打开主操作窗口并激活应用，菜单栏面板仍保留为快速查看入口。
@@ -605,25 +574,18 @@ struct DashboardView: View {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    /// 将同步错误压缩到底栏状态，保留上次数据时不改变主体高度。
-    private var footerStatusText: String {
-        if appState.isLoading { return "正在同步" }
+    /// 标题状态优先反映本轮同步结果；保留旧快照时也不会把失败误报为已连接。
+    private var connectionStatusText: String {
+        if appState.isLoading { return "同步中" }
         if appState.errorMessage != nil { return "同步失败" }
-        return "已连接 Sub2API"
+        return "已连接"
     }
 
-    /// 为加载、失败和成功状态选择语义明确的系统图标。
-    private var footerStatusIcon: String {
-        if appState.isLoading { return "arrow.triangle.2.circlepath" }
-        if appState.errorMessage != nil { return "exclamationmark.triangle.fill" }
-        return "checkmark.circle.fill"
-    }
-
-    /// 同步失败使用警示色，正常连接使用全局强调色。
-    private var footerStatusColor: Color {
+    /// 同步失败使用警示色，加载中降低视觉权重，正常连接使用系统成功色。
+    private var connectionStatusColor: Color {
         if appState.isLoading { return .secondary }
         if appState.errorMessage != nil { return AppTheme.warning }
-        return AppTheme.accent
+        return AppTheme.success
     }
 
     /// 使用稳定高度的进度条，并标出用户设置的剩余额度提醒阈值。
@@ -675,7 +637,7 @@ struct DashboardView: View {
     private func balanceColor(_ value: Double?) -> Color {
         guard let value else { return .secondary }
         let threshold = UserDefaults.standard.double(forKey: PreferenceKey.balanceThreshold)
-        return value <= threshold ? AppTheme.warning : AppTheme.accent
+        return value <= threshold ? AppTheme.warning : AppTheme.success
     }
 
     /// 将 0 到 1 的进度格式化为整数百分比。

@@ -45,16 +45,16 @@ final class QAWindowAppDelegate: NSObject, NSApplicationDelegate {
             // 使用固定的脱敏账户和无效临时令牌，只渲染界面而不接触真实登录数据。
             state = AppState(previewTwoFactor: AppState.makeQAPreviewTwoFactor())
             rootView = AnyView(RootView().environmentObject(state))
-            windowSize = NSSize(width: 360, height: 710)
+            windowSize = NSSize(width: 388, height: 500)
         case "settings":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             // 设置模式直接使用独立窗口内容，不再依赖菜单栏临时窗口上的 Sheet。
             rootView = AnyView(SettingsView().environmentObject(state))
-            windowSize = NSSize(width: 420, height: 660)
+            windowSize = NSSize(width: 460, height: 650)
         case "dashboard":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(RootView().environmentObject(state))
-            windowSize = NSSize(width: 372, height: 740)
+            windowSize = NSSize(width: 388, height: 680)
         case "main":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(MainWindowView().environmentObject(state))
@@ -62,6 +62,19 @@ final class QAWindowAppDelegate: NSObject, NSApplicationDelegate {
         case "main-api-keys":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(MainWindowView(initialSection: .apiKeys).environmentObject(state))
+            windowSize = NSSize(width: 1_120, height: 760)
+        case "main-usage":
+            state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            rootView = AnyView(MainWindowView(initialSection: .usage).environmentObject(state))
+            windowSize = NSSize(width: 1_120, height: 760)
+        case "main-usage-detail":
+            state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            state.showQAPreviewUsageDetail()
+            rootView = AnyView(MainWindowView(initialSection: .usage).environmentObject(state))
+            windowSize = NSSize(width: 1_120, height: 760)
+        case "main-profile":
+            state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            rootView = AnyView(MainWindowView(initialSection: .profile).environmentObject(state))
             windowSize = NSSize(width: 1_120, height: 760)
         case "main-api-key-usage":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
@@ -85,11 +98,11 @@ final class QAWindowAppDelegate: NSObject, NSApplicationDelegate {
                 BalanceActivityView(balance: state.snapshot?.balance)
                     .environmentObject(state)
             )
-            windowSize = NSSize(width: 430, height: 480)
+            windowSize = NSSize(width: 440, height: 480)
         default:
             state = AppState(restoreStoredSession: false)
             rootView = AnyView(RootView().environmentObject(state))
-            windowSize = NSSize(width: 360, height: 710)
+            windowSize = NSSize(width: 388, height: 500)
         }
         let controller = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: controller)

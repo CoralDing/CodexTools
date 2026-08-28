@@ -9,7 +9,6 @@ import SwiftUI
 /// 展示当前余额和最近增加活动，不把逐条账户记录写入本地持久化存储。
 struct BalanceActivityView: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.dismiss) private var dismiss
     @AppStorage(PreferenceKey.displayTimeZone) private var displayTimeZone = TimeZone.current.identifier
 
     let balance: Double?
@@ -23,18 +22,19 @@ struct BalanceActivityView: View {
             Divider()
             activityContent
         }
-        .frame(width: 430, height: 480)
-        .background(SubPilotWindowBackdrop())
+        .frame(width: 440, height: 480)
+        .background(Color.clear)
+        .glassSurface(radius: 14, tint: AppTheme.floatingGlassTint, addsShadow: true)
     }
 
-    /// 标题栏提供数据范围、时区、手动刷新和关闭命令。
+    /// 标题栏提供数据范围、时区和手动刷新；原生弹窗可点击外部关闭，无需重复关闭按钮。
     private var header: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("余额增加记录")
                     .font(.system(size: 16, weight: .semibold))
                 Text("最近 20 条余额增加 · \(selectedTimeZone.identifier)")
-                    .font(.system(size: 10))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -50,11 +50,6 @@ struct BalanceActivityView: View {
             .help("刷新余额增加记录")
             .disabled(appState.isLoadingBalanceActivities)
 
-            Button(action: dismiss.callAsFunction) {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(ToolbarIconButtonStyle())
-            .help("关闭")
         }
         .padding(.horizontal, 16)
         .frame(height: 62)
@@ -69,15 +64,15 @@ struct BalanceActivityView: View {
                     .foregroundStyle(.secondary)
                 Text(currency(balance))
                     .font(.system(size: 27, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(.primary)
                     .monospacedDigit()
             }
 
             Spacer()
 
-            Label("余额增加", systemImage: "arrow.up.right")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppTheme.accent)
+            Text("最近 20 条入账")
+                .font(AppTheme.captionFont)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 18)
         .frame(height: 88)
@@ -138,38 +133,33 @@ struct BalanceActivityView: View {
     private func activityRow(_ activity: BalanceActivity) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "arrow.up.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppTheme.accent)
-                .frame(width: 26, height: 26)
-                .background(AppTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppTheme.success)
+                .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
                     Text(activity.title)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(AppTheme.bodyEmphasizedFont)
                         .lineLimit(1)
-                    Text(formattedTime(activity.createdAt))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text(UsageFormatter.balanceChange(activity.amountChange))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppTheme.success)
                         .monospacedDigit()
                 }
 
-                Text(activity.detail)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(UsageFormatter.balanceChange(activity.amountChange))
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.accent)
-                    .monospacedDigit()
-                Text("入账")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text(activity.detail)
+                        .font(AppTheme.captionFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(formattedTime(activity.createdAt))
+                        .font(AppTheme.captionFont)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
         }
         .padding(.horizontal, 16)

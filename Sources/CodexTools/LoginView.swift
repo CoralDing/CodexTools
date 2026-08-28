@@ -53,8 +53,10 @@ struct LoginView: View {
                     }
                     Text(primaryButtonTitle)
                 }
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(PrimaryActionButtonStyle())
+            .subPilotProminentGlassButtonStyle()
+            .controlSize(.large)
             .disabled(!canSubmit || appState.isLoading)
 
             if appState.pendingTwoFactor != nil {
@@ -79,65 +81,65 @@ struct LoginView: View {
 
     /// 标题区以产品名作为第一视觉信号，并保持说明文字简短。
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 9) {
-                SubPilotBrandIcon(size: 30)
+        HStack(spacing: 12) {
+            SubPilotBrandIcon(size: 38)
+            VStack(alignment: .leading, spacing: 4) {
                 Text("SubPilot")
                     .font(.system(size: 21, weight: .semibold))
+                Text(appState.pendingTwoFactor == nil ? "登录 Sub2API，同步模型用量" : "完成两步验证")
+                    .font(AppTheme.bodyFont)
+                    .foregroundStyle(.secondary)
             }
-
-            Text(appState.pendingTwoFactor == nil ? "登录 Sub2API，同步模型用量" : "完成两步验证")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 39)
         }
     }
 
     /// 展示服务器、邮箱和密码输入；密码仅保存在当前视图内存中。
     private var credentialsContent: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            fieldLabel("服务器地址")
-            fieldShell(icon: "server.rack", isFocused: focusedField == .server) {
-                TextField("https://your-sub2api.example", text: $server)
-                    .textFieldStyle(.plain)
-                    .focused($focusedField, equals: .server)
-                    .onSubmit { focusedField = .email }
+        VStack(alignment: .leading, spacing: 14) {
+            labeledField("服务器地址") {
+                fieldShell(icon: "server.rack", isFocused: focusedField == .server) {
+                    TextField("https://your-sub2api.example", text: $server)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .server)
+                        .onSubmit { focusedField = .email }
+                }
             }
 
-            fieldLabel("邮箱")
-            fieldShell(icon: "envelope", isFocused: focusedField == .email) {
-                TextField("name@example.com", text: $email)
-                    .textFieldStyle(.plain)
-                    .focused($focusedField, equals: .email)
-                    .onSubmit { focusedField = .password }
+            labeledField("邮箱") {
+                fieldShell(icon: "envelope", isFocused: focusedField == .email) {
+                    TextField("name@example.com", text: $email)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .email)
+                        .onSubmit { focusedField = .password }
+                }
             }
 
-            fieldLabel("密码")
-            fieldShell(icon: "lock", isFocused: focusedField == .password) {
-                Group {
-                    if showsPassword {
-                        TextField("请输入密码", text: $password)
-                    } else {
-                        SecureField("请输入密码", text: $password)
+            labeledField("密码") {
+                fieldShell(icon: "lock", isFocused: focusedField == .password) {
+                    Group {
+                        if showsPassword {
+                            TextField("请输入密码", text: $password)
+                        } else {
+                            SecureField("请输入密码", text: $password)
+                        }
                     }
-                }
-                .textFieldStyle(.plain)
-                .focused($focusedField, equals: .password)
-                .onSubmit(submit)
+                    .textFieldStyle(.plain)
+                    .focused($focusedField, equals: .password)
+                    .onSubmit(submit)
 
-                Button {
-                    showsPassword.toggle()
-                } label: {
-                    Image(systemName: showsPassword ? "eye.slash" : "eye")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                    Button {
+                        showsPassword.toggle()
+                    } label: {
+                        Image(systemName: showsPassword ? "eye.slash" : "eye")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(showsPassword ? "隐藏密码" : "显示密码")
                 }
-                .buttonStyle(.plain)
-                .help(showsPassword ? "隐藏密码" : "显示密码")
             }
 
             securityNote("仅登录令牌保存在本机钥匙串，不保存密码")
-                .padding(.top, 1)
         }
     }
 
@@ -159,12 +161,17 @@ struct LoginView: View {
         .padding(.top, 12)
     }
 
-    /// 字段标签与输入框分离，提升紧凑表单的扫描效率。
-    private func fieldLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.bottom, -9)
+    /// 标签与输入框在同一布局单元中排列，避免用负间距手工拼接导致焦点切换时跳动。
+    private func labeledField<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(AppTheme.bodyEmphasizedFont)
+                .foregroundStyle(.secondary)
+            content()
+        }
     }
 
     /// 使用图标、统一高度和焦点边框构建输入容器，避免系统默认样式在不同字段间不一致。

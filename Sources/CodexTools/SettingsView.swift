@@ -28,18 +28,11 @@ struct SettingsView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    sectionTitle("菜单栏")
-                    menuBarSettings
-
-                    sectionTitle("分析")
-                    consumptionAnalysisSettings
-
-                    sectionTitle("提醒")
-                    notificationSettings
-
-                    sectionTitle("同步与时间")
-                    syncSettings
+                VStack(alignment: .leading, spacing: 18) {
+                    settingsSection("菜单栏") { menuBarSettings }
+                    settingsSection("分析") { consumptionAnalysisSettings }
+                    settingsSection("提醒") { notificationSettings }
+                    settingsSection("同步与时间") { syncSettings }
                 }
                 .padding(AppTheme.contentPadding)
             }
@@ -47,8 +40,8 @@ struct SettingsView: View {
             Divider()
             footer
         }
-        .frame(width: 420, height: 660)
-        .background(SubPilotWindowBackdrop())
+        .frame(width: 460, height: 650)
+        .background(SubPilotWindowBackdrop(showsSidebarTint: false))
     }
 
     /// 消耗分析使用独立开关；关闭后立即停止后台任务，且不会连带关闭设置窗口。
@@ -216,13 +209,18 @@ struct SettingsView: View {
         .glassChromeSurface()
     }
 
-    /// 分组标题使用小号次级文字，与主标题形成明确但克制的层级。
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.leading, 3)
-            .padding(.bottom, -8)
+    /// 标题和设置组作为一个整体参与纵向排版，避免依赖负间距造成窗口缩放时错位。
+    private func settingsSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(AppTheme.captionFont.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 3)
+            content()
+        }
     }
 
     /// 设置行固定图标列和最小高度，副标题存在时也不会挤压右侧原生控件。
@@ -243,7 +241,7 @@ struct SettingsView: View {
                     .font(.system(size: 13))
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 10))
+                        .font(AppTheme.captionFont)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -252,7 +250,7 @@ struct SettingsView: View {
             control()
         }
         .padding(.horizontal, 13)
-        .frame(minHeight: subtitle == nil ? 50 : 54)
+        .frame(minHeight: subtitle == nil ? 52 : 58)
     }
 
     /// 分隔线从文字列起始，保持图标列的连续性。
@@ -293,7 +291,7 @@ private struct SettingsGroupStyle: ViewModifier {
             .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                    .stroke(AppTheme.border, lineWidth: 1)
+                    .stroke(AppTheme.border, lineWidth: 0.75)
             }
     }
 }

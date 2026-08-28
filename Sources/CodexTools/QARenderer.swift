@@ -16,6 +16,11 @@ enum QARenderer {
         let hostingView = NSHostingView(rootView: renderTarget.view)
         hostingView.frame = NSRect(origin: .zero, size: renderTarget.size)
 
+        // 视觉检查可显式覆盖外观，避免自动化进程始终继承启动终端的浅色模式。
+        if let appearance = requestedAppearance {
+            hostingView.appearance = appearance
+        }
+
         // 原生窗口承载能正确绘制 TextField、Picker 和 Menu，ImageRenderer 会把这些控件画成占位符。
         let window = NSWindow(
             contentRect: hostingView.frame,
@@ -23,6 +28,9 @@ enum QARenderer {
             backing: .buffered,
             defer: false
         )
+        if let appearance = requestedAppearance {
+            window.appearance = appearance
+        }
         window.contentView = hostingView
         window.layoutIfNeeded()
         hostingView.layoutSubtreeIfNeeded()
@@ -59,6 +67,15 @@ enum QARenderer {
         return outputURL
     }
 
+    /// 把 QA 环境变量转换为 AppKit 外观；未设置时继续跟随当前 macOS 系统偏好。
+    private static var requestedAppearance: NSAppearance? {
+        switch ProcessInfo.processInfo.environment["CODEXTOOLS_QA_APPEARANCE"]?.lowercased() {
+        case "dark": return NSAppearance(named: .darkAqua)
+        case "light": return NSAppearance(named: .aqua)
+        default: return nil
+        }
+    }
+
     /// 为登录、两步验证、菜单栏、主窗口和设置创建无凭据的确定性渲染目标。
     private static func makeRenderTarget(mode: String) -> RenderTarget {
         switch mode {
@@ -66,13 +83,13 @@ enum QARenderer {
             let state = AppState(previewTwoFactor: AppState.makeQAPreviewTwoFactor())
             return RenderTarget(
                 view: AnyView(RootView().environmentObject(state)),
-                size: CGSize(width: 360, height: 480)
+                size: CGSize(width: 388, height: 500)
             )
         case "dashboard":
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             return RenderTarget(
                 view: AnyView(RootView().environmentObject(state)),
-                size: CGSize(width: 372, height: 740)
+                size: CGSize(width: 388, height: 680)
             )
         case "main":
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
@@ -118,7 +135,7 @@ enum QARenderer {
                         suggestedModel: "gpt-5.6-sol"
                     )
                 ),
-                size: CGSize(width: 680, height: 568)
+                size: CGSize(width: 430, height: 570)
             )
         case "api-key-usage-result":
             return RenderTarget(
@@ -133,7 +150,7 @@ enum QARenderer {
                         )
                     )
                 ),
-                size: CGSize(width: 680, height: 568)
+                size: CGSize(width: 430, height: 570)
             )
         case "main-usage":
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
@@ -158,7 +175,7 @@ enum QARenderer {
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             return RenderTarget(
                 view: AnyView(SettingsView().environmentObject(state)),
-                size: CGSize(width: 420, height: 660)
+                size: CGSize(width: 460, height: 650)
             )
         case "balance-activity":
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
@@ -167,13 +184,13 @@ enum QARenderer {
                     BalanceActivityView(balance: state.snapshot?.balance)
                         .environmentObject(state)
                 ),
-                size: CGSize(width: 430, height: 480)
+                size: CGSize(width: 440, height: 480)
             )
         default:
             let state = AppState(restoreStoredSession: false)
             return RenderTarget(
                 view: AnyView(RootView().environmentObject(state)),
-                size: CGSize(width: 372, height: 480)
+                size: CGSize(width: 388, height: 500)
             )
         }
     }

@@ -525,17 +525,19 @@ struct APIKeysPortalView: View {
                 Text("周期限制").frame(width: 110, alignment: .leading)
                 Text("最近使用").frame(width: 92, alignment: .leading)
                 Text("状态").frame(width: 66, alignment: .leading)
-                Text("操作").frame(width: 164, alignment: .trailing)
+                Text("操作").frame(width: 118, alignment: .trailing)
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(AppTheme.captionFont.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .frame(height: 38)
             .background(AppTheme.tableHeader)
             Divider()
-            ForEach(filteredKeys) { key in
-                keyRow(key)
-                if key.id != filteredKeys.last?.id { Divider().padding(.leading, 14) }
+            LazyVStack(spacing: 0) {
+                ForEach(filteredKeys) { key in
+                    keyRow(key)
+                    if key.id != filteredKeys.last?.id { Divider().padding(.leading, 14) }
+                }
             }
         }
         .panelSurface(padding: 0)
@@ -545,8 +547,8 @@ struct APIKeysPortalView: View {
     private func keyRow(_ key: UserAPIKey) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(key.name).font(.system(size: 12, weight: .medium))
-                Text(maskedKey(key.key)).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                Text(key.name).font(AppTheme.bodyEmphasizedFont)
+                Text(maskedKey(key.key)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text(key.groupName ?? "未分组").lineLimit(1).frame(width: 92, alignment: .leading)
@@ -570,15 +572,15 @@ struct APIKeysPortalView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 92, alignment: .leading)
             Label(statusTitle(key.status), systemImage: "circle.fill")
-                .font(.system(size: 10, weight: .medium))
+                .font(AppTheme.captionFont.weight(.medium))
                 .foregroundStyle(statusColor(key.status))
                 .frame(width: 66, alignment: .leading)
             HStack(spacing: 5) {
                 Button { keyForUsage = key } label: {
-                    Label("使用方式", systemImage: "arrow.down.to.line.compact")
+                    Image(systemName: "arrow.down.to.line.compact")
                 }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .help("使用方式与导入客户端")
                 Button { copyKey(key.key) } label: { Image(systemName: "doc.on.doc") }.help("复制 API 密钥")
@@ -586,11 +588,11 @@ struct APIKeysPortalView: View {
                 Button(role: .destructive) { keyPendingDeletion = key } label: { Image(systemName: "trash") }.help("删除密钥")
             }
             .buttonStyle(.borderless)
-            .frame(width: 164, alignment: .trailing)
+            .frame(width: 118, alignment: .trailing)
         }
-        .font(.system(size: 11))
+        .font(AppTheme.bodyFont)
         .padding(.horizontal, 14)
-        .frame(minHeight: 62)
+        .frame(minHeight: 58)
         .contentShape(Rectangle())
         .onTapGesture { beginEdit(key) }
     }
@@ -675,7 +677,7 @@ struct APIKeysPortalView: View {
             .padding(16)
         }
         .frame(width: 620, height: 670)
-        .glassSurface(radius: 16, tint: AppTheme.chromeGlassTint, addsShadow: true)
+        .glassSurface(radius: 16, tint: AppTheme.floatingGlassTint, addsShadow: true)
     }
 
     /// 表单分区标题使用轻量层级，不再为每个字段增加额外容器。
@@ -802,7 +804,7 @@ struct APIKeysPortalView: View {
 
     /// 状态颜色只承担辅助识别，文字仍明确描述具体状态。
     private func statusColor(_ status: String) -> Color {
-        switch status { case "active": return AppTheme.accent; case "expired", "quota_exhausted": return AppTheme.warning; default: return .secondary }
+        switch status { case "active": return AppTheme.success; case "expired", "quota_exhausted": return AppTheme.warning; default: return .secondary }
     }
 
     /// 页面消息保持为非阻塞横条，保存失败不会清空用户正在编辑的字段。
@@ -863,7 +865,7 @@ struct APIKeyUsageSheet: View {
                             if target != APIKeyClientTarget.allCases.last { Divider() }
                         }
                     }
-                    .glassSurface(radius: 12, tint: Color.white.opacity(0.025))
+                    .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
 
                     manualUsageSection
                 }
@@ -871,10 +873,9 @@ struct APIKeyUsageSheet: View {
             }
             .scrollIndicators(.visible)
         }
-        .frame(width: 510, height: 590)
-        // 自适应底色提供稳定可读性，外层系统玻璃仍会采样表格和图表形成真实折射。
-        .background(AppTheme.inspectorCanvas.opacity(0.52), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .glassSurface(radius: 12, tint: AppTheme.chromeGlassTint, addsShadow: true)
+        .frame(width: 430, height: 570)
+        // 导入面板本身是唯一玻璃层，内部连接信息和客户端列表只使用间距与分隔线分组。
+        .glassSurface(radius: AppTheme.floatingCornerRadius, tint: AppTheme.floatingGlassTint, addsShadow: true)
     }
 
     /// 标题区显示密钥名称和掩码，不在屏幕上暴露完整令牌。
@@ -882,9 +883,9 @@ struct APIKeyUsageSheet: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("API 密钥使用方式")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                 Text("\(key.name) · \(maskedKey)")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -912,7 +913,7 @@ struct APIKeyUsageSheet: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("API Base URL")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(AppTheme.captionFont.weight(.medium))
                         .foregroundStyle(.secondary)
                     HStack(spacing: 8) {
                         Text(openAIBaseURL)
@@ -931,7 +932,7 @@ struct APIKeyUsageSheet: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("默认模型")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(AppTheme.captionFont.weight(.medium))
                         .foregroundStyle(.secondary)
                     TextField("例如：gpt-5.6-sol", text: $model)
                         .textFieldStyle(.plain)
@@ -945,12 +946,7 @@ struct APIKeyUsageSheet: View {
                 }
                 .frame(width: 170)
             }
-            .padding(12)
-            .background(AppTheme.controlFill, in: RoundedRectangle(cornerRadius: 8))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(AppTheme.border, lineWidth: 0.75)
-            }
+            .padding(.vertical, 4)
         }
     }
 
@@ -967,12 +963,12 @@ struct APIKeyUsageSheet: View {
                     Text(target.title).font(.system(size: 12, weight: .semibold))
                     if target == .cursor {
                         Text("半自动")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(AppTheme.captionFont.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
                 }
                 Text(target.detail)
-                    .font(.system(size: 10))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -980,8 +976,8 @@ struct APIKeyUsageSheet: View {
                 ProgressView().controlSize(.small).frame(width: 82)
             } else if completedTargets.contains(target) {
                 Label("已完成", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(AppTheme.accent)
+                    .font(AppTheme.captionFont.weight(.medium))
+                    .foregroundStyle(AppTheme.success)
                     .frame(width: 82)
             } else {
                 Button(target.actionTitle) { beginImport(target) }
@@ -1004,7 +1000,7 @@ struct APIKeyUsageSheet: View {
             export OPENAI_BASE_URL="\(openAIBaseURL)"
             export OPENAI_API_KEY="<当前密钥>"
             """)
-            .font(.system(size: 10, design: .monospaced))
+            .font(.system(size: 11, design: .monospaced))
             .textSelection(.enabled)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1015,7 +1011,7 @@ struct APIKeyUsageSheet: View {
             }
             HStack {
                 Text("适用于读取 OpenAI 兼容环境变量的命令行工具")
-                    .font(.system(size: 9))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button { copy(shellConfiguration, message: "环境变量已复制") } label: {
@@ -1031,17 +1027,17 @@ struct APIKeyUsageSheet: View {
     private func importMessage(title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(isError ? AppTheme.warning : AppTheme.accent)
+                .foregroundStyle(isError ? AppTheme.warning : AppTheme.success)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 11, weight: .semibold))
-                Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).textSelection(.enabled)
+                Text(detail).font(AppTheme.captionFont).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Spacer()
         }
         .padding(12)
-        .glassSurface(
-            radius: 10,
-            tint: (isError ? AppTheme.warning : AppTheme.accent).opacity(0.12)
+        .background(
+            (isError ? AppTheme.warning : AppTheme.success).opacity(0.08),
+            in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
         )
     }
 
@@ -1161,7 +1157,7 @@ struct UsageRecordsPortalView: View {
 
             if let record = appState.portalUsageRecordDetail {
                 usageDetail(record)
-                    .frame(width: 340)
+                    .frame(width: 360)
                     // 玻璃抽屉只淡入，不再横向移动整个材质采样区域，降低打开明细时的合成压力。
                     .transition(.opacity)
             }
@@ -1185,28 +1181,53 @@ struct UsageRecordsPortalView: View {
         }
     }
 
-    /// 组合筛选直接映射到 Sub2API 查询参数，切换任一条件都会从第一页重新读取。
+    /// 高频筛选保持单行，低频计费条件收进更多菜单，给长列表留出足够首屏高度。
     private var filterBar: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                usagePicker("API 密钥", selection: $selectedKeyID, values: appState.apiKeys.map { ($0.id, $0.name) })
-                menuPicker("模型", selection: $selectedModel, values: availableModels)
-                usagePicker("分组", selection: $selectedGroupID, values: appState.availableGroups.map { ($0.id, $0.name) })
-                menuPicker("请求类型", selection: $selectedRequestType, values: ["sync", "stream", "ws_v2", "live"])
-                Spacer(minLength: 0)
+        HStack(spacing: 8) {
+            usagePicker("API 密钥", selection: $selectedKeyID, values: appState.apiKeys.map { ($0.id, $0.name) })
+            menuPicker("模型", selection: $selectedModel, values: availableModels)
+            usagePicker("分组", selection: $selectedGroupID, values: appState.availableGroups.map { ($0.id, $0.name) })
+            menuPicker("请求类型", selection: $selectedRequestType, values: ["sync", "stream", "ws_v2", "live"])
+            billingFilterMenu
+            Spacer(minLength: 0)
+            Button(action: clearFilters) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
             }
-            HStack(spacing: 8) {
-                usagePicker("计费类型", selection: $selectedBillingType, values: [(0, "余额"), (1, "订阅")])
-                menuPicker("计费模式", selection: $selectedBillingMode, values: ["standard", "batch", "priority", "flex"])
-                Spacer()
-                Button("清除筛选", action: clearFilters).buttonStyle(.plain).foregroundStyle(AppTheme.accent)
-                Button(action: exportCSV) { Label("导出 CSV", systemImage: "square.and.arrow.down") }
-                    .buttonStyle(.bordered)
+            .buttonStyle(ToolbarIconButtonStyle())
+            .help("清除全部筛选")
+            Button(action: exportCSV) {
+                Image(systemName: "square.and.arrow.down")
             }
+            .buttonStyle(ToolbarIconButtonStyle())
+            .help("导出当前已加载记录")
         }
-        .padding(12)
-        .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay { RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.border) }
+        .padding(8)
+        .glassSurface(radius: AppTheme.floatingCornerRadius, isInteractive: true)
+    }
+
+    /// 更多筛选集中计费类型和计费模式，菜单标题会提示当前是否存在额外条件。
+    private var billingFilterMenu: some View {
+        Menu {
+            Picker("计费类型", selection: $selectedBillingType) {
+                Text("全部计费类型").tag(nil as Int?)
+                Text("余额").tag(0 as Int?)
+                Text("订阅").tag(1 as Int?)
+            }
+            Picker("计费模式", selection: $selectedBillingMode) {
+                Text("全部计费模式").tag("")
+                ForEach(["standard", "batch", "priority", "flex"], id: \.self) { mode in
+                    Text(mode).tag(mode)
+                }
+            }
+        } label: {
+            Label(hasBillingFilter ? "计费已筛选" : "更多", systemImage: "ellipsis.circle")
+        }
+        .frame(minWidth: 92)
+    }
+
+    /// 任一低频计费条件生效时返回真，用于在折叠菜单上提供可见反馈。
+    private var hasBillingFilter: Bool {
+        selectedBillingType != nil || !selectedBillingMode.isEmpty
     }
 
     /// 可选整数菜单同时用于密钥、分组和计费类型，空值统一表示全部。
@@ -1216,7 +1237,7 @@ struct UsageRecordsPortalView: View {
             ForEach(values, id: \.0) { value in Text(value.1).tag(value.0 as Int?) }
         }
         .labelsHidden()
-        .frame(minWidth: 116)
+        .frame(minWidth: 108, maxWidth: 126)
     }
 
     /// 字符串菜单用于模型和请求类型，空字符串不会进入服务端查询。
@@ -1226,33 +1247,21 @@ struct UsageRecordsPortalView: View {
             ForEach(values, id: \.self) { Text($0).tag($0) }
         }
         .labelsHidden()
-        .frame(minWidth: 122)
+        .frame(minWidth: 108, maxWidth: 126)
     }
 
     /// 汇总带优先使用仪表盘服务端聚合值，标准消费则由当前已加载历史页准确求和。
     private var usageSummaryRail: some View {
-        HStack(spacing: 0) {
-            summaryMetric("Token", UsageFormatter.compactTokens(appState.snapshot?.periodTokens), "circle.hexagongrid")
-            Divider().frame(height: 42)
-            summaryMetric("请求", UsageFormatter.requestCount(appState.snapshot?.requestCount), "arrow.up.right")
-            Divider().frame(height: 42)
-            summaryMetric("实际消费", UsageFormatter.cost(appState.snapshot?.usageCost), "dollarsign")
-            Divider().frame(height: 42)
-            summaryMetric("标准消费", UsageFormatter.cost(displayedDerivedData.standardCost), "doc.text")
-            Divider().frame(height: 42)
-            summaryMetric("平均响应", UsageFormatter.duration(milliseconds: appState.snapshot?.averageResponseMilliseconds), "timer")
-        }
-        .panelSurface(padding: 0)
-    }
-
-    /// 单个汇总指标固定等分，长金额会缩放而不会改变相邻列位置。
-    private func summaryMetric(_ title: String, _ value: String, _ icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Label(title, systemImage: icon).font(.system(size: 10)).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 16, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        AppMetricRail(
+            items: [
+                AppMetricItem(icon: "circle.hexagongrid", title: "Token", value: UsageFormatter.compactTokens(appState.snapshot?.periodTokens)),
+                AppMetricItem(icon: "arrow.up.right", title: "请求", value: UsageFormatter.requestCount(appState.snapshot?.requestCount)),
+                AppMetricItem(icon: "dollarsign", title: "实际消费", value: UsageFormatter.cost(appState.snapshot?.usageCost)),
+                AppMetricItem(icon: "doc.text", title: "标准消费", value: UsageFormatter.cost(displayedDerivedData.standardCost)),
+                AppMetricItem(icon: "timer", title: "平均响应", value: UsageFormatter.duration(milliseconds: appState.snapshot?.averageResponseMilliseconds))
+            ],
+            compact: true
+        )
     }
 
     /// 趋势图和模型分布都基于当前已加载真实记录，不生成不存在的示例时间序列。
@@ -1268,7 +1277,7 @@ struct UsageRecordsPortalView: View {
                         .foregroundStyle(AppTheme.accent.opacity(0.08))
                 }
                 .chartXAxis(.hidden)
-                .frame(height: 116)
+                .frame(height: 82)
             }
             .padding(14)
             .frame(maxWidth: .infinity)
@@ -1281,11 +1290,12 @@ struct UsageRecordsPortalView: View {
                         .cornerRadius(2)
                 }
                 .chartXAxis(.hidden)
-                .frame(height: 116)
+                .frame(height: 82)
             }
             .padding(14)
             .frame(maxWidth: .infinity)
         }
+        .frame(height: 132)
         .panelSurface(padding: 0)
     }
 
@@ -1293,7 +1303,7 @@ struct UsageRecordsPortalView: View {
     private var usageTable: some View {
         VStack(spacing: 0) {
             HStack(spacing: 9) {
-                Text("时间").frame(width: 78, alignment: .leading)
+                Text("时间").frame(width: 92, alignment: .leading)
                 Text("模型 / 分组").frame(maxWidth: .infinity, alignment: .leading)
                 Text("密钥").frame(width: 96, alignment: .leading)
                 Text("Token").frame(width: 68, alignment: .trailing)
@@ -1302,7 +1312,7 @@ struct UsageRecordsPortalView: View {
                 Text("实际 / 标准").frame(width: 106, alignment: .trailing)
                 Text("状态").frame(width: 52, alignment: .trailing)
             }
-            .font(.system(size: 9, weight: .medium))
+            .font(AppTheme.captionFont.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .frame(height: 36)
@@ -1343,7 +1353,7 @@ struct UsageRecordsPortalView: View {
     private var usageTableFooter: some View {
         HStack {
             Text("已加载 \(appState.portalUsageRecords.count) / \(appState.portalUsageTotal) 条")
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
             Spacer()
             if appState.isLoadingMorePortalUsage {
@@ -1353,7 +1363,7 @@ struct UsageRecordsPortalView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(AppTheme.accent)
             } else if !appState.portalUsageRecords.isEmpty {
-                Text("已加载全部记录").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("已加载全部记录").font(AppTheme.captionFont).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 12)
@@ -1362,10 +1372,10 @@ struct UsageRecordsPortalView: View {
     /// 点击一行立即显示已有明细，同时异步补读 `/usage/{id}` 的完整字段。
     private func usageRow(_ record: PortalUsageRecord) -> some View {
         HStack(spacing: 9) {
-            Text(formattedTime(record.createdAt)).frame(width: 78, alignment: .leading)
+            Text(formattedTime(record.createdAt)).frame(width: 92, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.model).fontWeight(.medium).lineLimit(1)
-                Text(record.groupName ?? record.endpoint ?? "—").font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                Text(record.groupName ?? record.endpoint ?? "—").font(AppTheme.captionFont).foregroundStyle(.secondary).lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text(record.apiKeyName).lineLimit(1).frame(width: 96, alignment: .leading)
@@ -1373,12 +1383,12 @@ struct UsageRecordsPortalView: View {
             Text(record.inputOutputDescription).monospacedDigit().frame(width: 92, alignment: .trailing)
             Text(UsageFormatter.duration(milliseconds: record.durationMilliseconds)).monospacedDigit().frame(width: 62, alignment: .trailing)
             Text("\(UsageFormatter.cost(record.actualCost)) / \(UsageFormatter.cost(record.standardCost))").monospacedDigit().frame(width: 106, alignment: .trailing)
-            Label("成功", systemImage: "circle.fill").labelStyle(.titleAndIcon).foregroundStyle(AppTheme.accent).frame(width: 52, alignment: .trailing)
+            Label("成功", systemImage: "circle.fill").labelStyle(.titleAndIcon).foregroundStyle(AppTheme.success).frame(width: 52, alignment: .trailing)
         }
-        .font(.system(size: 10))
+        .font(AppTheme.bodyFont)
         .padding(.horizontal, 12)
-        .frame(minHeight: 50)
-        .background(appState.portalUsageRecordDetail?.id == record.id ? AppTheme.accent.opacity(0.07) : Color.clear)
+        .frame(minHeight: AppTheme.tableRowHeight)
+        .background(appState.portalUsageRecordDetail?.id == record.id ? AppTheme.selectedSurface : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { Task { await appState.loadPortalUsageRecordDetail(record) } }
     }
@@ -1388,8 +1398,8 @@ struct UsageRecordsPortalView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("记录详情").font(.system(size: 15, weight: .semibold))
-                    Text("\(formattedTime(record.createdAt)) · \(record.model)").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("记录详情").font(.system(size: 16, weight: .semibold))
+                    Text("\(formattedTime(record.createdAt)) · \(record.model)").font(AppTheme.captionFont).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { appState.clearPortalUsageRecordDetail() } label: { Image(systemName: "xmark") }
@@ -1397,8 +1407,20 @@ struct UsageRecordsPortalView: View {
             }
             .padding(14)
             Divider()
+
+            HStack(spacing: 0) {
+                detailSummaryMetric("实际消费", UsageFormatter.cost(record.actualCost))
+                Divider().frame(height: 34)
+                detailSummaryMetric("标准消费", UsageFormatter.cost(record.standardCost))
+                Divider().frame(height: 34)
+                detailSummaryMetric("倍率", record.multiplier.map { String(format: "%.2f×", $0) } ?? "—")
+            }
+            .padding(.vertical, 10)
+            .background(AppTheme.subtleSurface)
+            Divider()
+
             ScrollView {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     detailSection("请求信息")
                     detailRow("请求 ID", record.requestID)
                     detailRow("端点", record.endpoint ?? "—")
@@ -1415,7 +1437,7 @@ struct UsageRecordsPortalView: View {
                     detailRow("缓存创建单价", UsageFormatter.tokenPricePerMillion(cost: record.cacheCreationCost, tokens: record.cacheCreationTokens))
                     detailRow("缓存读取单价", UsageFormatter.tokenPricePerMillion(cost: record.cacheReadCost, tokens: record.cacheReadTokens))
                     Text("根据本次账单反算，实际价格可能受分组、倍率与计费模式影响")
-                        .font(.system(size: 9))
+                        .font(AppTheme.captionFont)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
@@ -1437,27 +1459,46 @@ struct UsageRecordsPortalView: View {
             } label: {
                 Label("复制请求 ID", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(AppTheme.accent)
+            .subPilotGlassButtonStyle()
             .padding(14)
         }
         .frame(maxHeight: .infinity)
-        // 数据抽屉正文使用实体底色保证账单可读性，玻璃感仅由边缘高光、材质和投影表达。
-        .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: 10))
-        .glassSurface(radius: 10, addsShadow: true)
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.18), lineWidth: 0.5) }
+        // 详情抽屉本身就是悬浮层，不再叠加实体底色，桌面和表格可以真正参与玻璃折射。
+        .glassSurface(radius: AppTheme.floatingCornerRadius, tint: AppTheme.floatingGlassTint, addsShadow: true)
     }
 
-    /// 详情分区标题使用浅底分隔，不增加嵌套卡片。
+    /// 详情顶部三项费用使用相同数字基线，打开抽屉后无需滚动即可完成倍率核对。
+    private func detailSummaryMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(AppTheme.captionFont)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 详情分区标题和细分隔线共同建立层级，不增加嵌套背景或卡片。
     private func detailSection(_ title: String) -> some View {
-        Text(title).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).frame(height: 30).background(AppTheme.tableHeader)
+        HStack(spacing: 10) {
+            Text(title)
+                .font(AppTheme.captionFont.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Divider()
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 34)
     }
 
     /// 明细键值行固定右侧对齐，长请求 ID 会安全缩放。
     private func detailRow(_ title: String, _ value: String) -> some View {
         HStack { Text(title).foregroundStyle(.secondary); Spacer(); Text(value).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6) }
-            .font(.system(size: 10)).padding(.horizontal, 14).frame(height: 30)
+            .font(AppTheme.captionFont).padding(.horizontal, 14).frame(height: 32)
     }
 
     /// 当前筛选条件集中构造，图表、列表刷新和继续加载始终使用同一口径。
@@ -1658,7 +1699,7 @@ struct ChannelStatusPortalView: View {
                 .frame(maxWidth: .infinity, minHeight: 360)
                 .panelSurface()
             } else {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(appState.channelMonitors) { monitor in
                         HStack(spacing: 14) {
                             Circle()
@@ -1667,7 +1708,7 @@ struct ChannelStatusPortalView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(monitor.name).font(.system(size: 13, weight: .medium))
                                 Text("\(monitor.groupName) · \(monitor.model)")
-                                    .font(.system(size: 10))
+                                    .font(AppTheme.captionFont)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -1692,7 +1733,7 @@ struct ChannelStatusPortalView: View {
     /// 指标使用上标签下数值，渠道名称变化不会挤压数值列。
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .trailing, spacing: 3) {
-            Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
+            Text(title).font(AppTheme.captionFont).foregroundStyle(.secondary)
             Text(value).font(.system(size: 12, weight: .medium)).monospacedDigit()
         }
         .frame(width: 96, alignment: .trailing)
@@ -1711,7 +1752,7 @@ struct ChannelStatusPortalView: View {
     /// 正常、波动和异常分别使用强调、警示和红色，未知保持灰色。
     private func statusColor(_ status: String) -> Color {
         switch statusTitle(status) {
-        case "正常": return AppTheme.accent
+        case "正常": return AppTheme.success
         case "波动": return AppTheme.warning
         case "异常": return .red
         default: return .secondary
@@ -1743,13 +1784,13 @@ struct SubscriptionsPortalView: View {
                                     Text(subscription.groupName)
                                         .font(.system(size: 15, weight: .semibold))
                                     Text(subscription.expiresAt.map { "有效期至 \(formattedDate($0))" } ?? "长期有效")
-                                        .font(.system(size: 10))
+                                        .font(AppTheme.captionFont)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Text(subscription.status == "active" ? "使用中" : subscription.status)
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(subscription.status == "active" ? AppTheme.accent : .secondary)
+                                    .foregroundStyle(subscription.status == "active" ? AppTheme.success : .secondary)
                             }
 
                             HStack(alignment: .top, spacing: 0) {
@@ -1792,12 +1833,12 @@ struct SubscriptionsPortalView: View {
     ) -> some View {
         let progress = limit.flatMap { $0 > 0 ? min(max(used / $0, 0), 1) : nil }
         return VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(title).font(AppTheme.captionFont).foregroundStyle(.secondary)
             HStack {
                 Text(limit.map { "\(UsageFormatter.cost(used)) / \(UsageFormatter.cost($0))" } ?? UsageFormatter.cost(used))
                 Spacer()
                 Text(progress.map { $0.formatted(.percent.precision(.fractionLength(0))) } ?? "未限制")
-                    .font(.system(size: 9))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
             }
             .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -1805,7 +1846,7 @@ struct SubscriptionsPortalView: View {
             ProgressView(value: progress ?? 0)
                 .tint((progress ?? 0) >= 0.9 ? AppTheme.warning : AppTheme.accent)
             Text(resetDescription(resetInSeconds))
-                .font(.system(size: 9))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -1892,12 +1933,12 @@ struct RedeemPortalView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(activity.title).font(.system(size: 12, weight: .medium))
-                                Text(activity.detail).font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(activity.detail).font(AppTheme.captionFont).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text(UsageFormatter.balanceChange(activity.amountChange))
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(AppTheme.accent)
+                                .foregroundStyle(AppTheme.success)
                                 .monospacedDigit()
                         }
                         .padding(.horizontal, 16)
@@ -1969,7 +2010,7 @@ struct ProfilePortalView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(profile.email).font(.system(size: 13, weight: .semibold))
                     Text("\(profile.role == "user" ? "用户" : profile.role) · \(profile.status == "active" ? "启用" : profile.status)")
-                        .font(.system(size: 10))
+                        .font(AppTheme.captionFont)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -2047,7 +2088,7 @@ struct ProfilePortalView: View {
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 11, weight: .medium))
-                Text(value).font(.system(size: 9)).foregroundStyle(.secondary)
+                Text(value).font(AppTheme.captionFont).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -2058,7 +2099,7 @@ struct ProfilePortalView: View {
     /// 账户指标固定等分，避免金额长度影响并发值位置。
     private func accountMetric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
+            Text(title).font(AppTheme.captionFont).foregroundStyle(.secondary)
             Text(value).font(.system(size: 14, weight: .semibold)).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

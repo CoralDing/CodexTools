@@ -10,7 +10,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
 
-    /// 已存在安全会话时展示数据，否则展示登录表单。
+    /// 已存在安全会话时展示数据，否则展示登录表单；根视图保持透明才能让桌面参与玻璃折射。
     var body: some View {
         Group {
             if appState.session == nil {
@@ -19,7 +19,8 @@ struct RootView: View {
                 DashboardView()
             }
         }
-        .frame(width: 372)
-        .background(SubPilotWindowBackdrop())
+        .frame(width: 388)
+        .background(Color.clear)
+        .glassSurface(radius: 16, tint: AppTheme.chromeGlassTint, addsShadow: true)
     }
 }

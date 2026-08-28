@@ -9,31 +9,50 @@ import SwiftUI
 
 /// 集中维护应用视觉变量，避免登录、仪表盘和设置页出现相近但不一致的样式。
 enum AppTheme {
-    // 高饱和青绿只承担交互和成功语义，避免整套界面退化成单一青色主题。
-    static let accent = Color(red: 0.12, green: 0.78, blue: 0.74)
-    static let accentPressed = Color(red: 0.07, green: 0.63, blue: 0.61)
-    static let warning = Color(red: 0.96, green: 0.64, blue: 0.18)
+    // 使用系统语义色保证浅色、深色和高对比度模式都可读；品牌色只承担交互和主图表语义。
+    static let accent = Color(red: 0.02, green: 0.58, blue: 0.57)
+    static let accentPressed = Color(red: 0.01, green: 0.46, blue: 0.45)
+    static let success = Color(nsColor: .systemGreen)
+    static let warning = Color(nsColor: .systemOrange)
+    static let danger = Color(nsColor: .systemRed)
 
     // 使用 AppKit 语义色跟随 macOS 外观。此前固定的深石墨背景遇到浅色系统文字时，会产生黑底黑字。
     static let canvas = Color(nsColor: .windowBackgroundColor)
-    static let contentCanvas = Color(nsColor: .controlBackgroundColor).opacity(0.82)
-    static let inspectorCanvas = Color(nsColor: .underPageBackgroundColor).opacity(0.88)
-    static let workspaceCanvas = Color(nsColor: .windowBackgroundColor).opacity(0.96)
+    static let contentCanvas = Color(nsColor: .controlBackgroundColor)
+    static let inspectorCanvas = Color(nsColor: .underPageBackgroundColor)
+    static let workspaceCanvas = Color(nsColor: .windowBackgroundColor)
 
     // 控件、代码块和表头都从系统主文字色派生，浅色模式使用黑色轻染，深色模式自动改为白色轻染。
-    static let controlFill = Color.primary.opacity(0.045)
-    static let codeSurface = Color.primary.opacity(0.055)
-    static let subtleSurface = Color.primary.opacity(0.035)
-    static let tableHeader = Color.primary.opacity(0.025)
-    static let border = Color.primary.opacity(0.10)
-    static let strongBorder = Color.primary.opacity(0.18)
+    static let controlFill = Color.primary.opacity(0.055)
+    static let codeSurface = Color.primary.opacity(0.060)
+    static let subtleSurface = Color.primary.opacity(0.040)
+    static let selectedSurface = accent.opacity(0.11)
+    static let tableHeader = Color.primary.opacity(0.032)
+    static let border = Color.primary.opacity(0.085)
+    static let strongBorder = Color.primary.opacity(0.14)
 
     // 玻璃只保留极轻的语义色染色，避免在浅色模式下把整个悬浮层压成灰黑色。
-    static let glassTint = Color.primary.opacity(0.015)
-    static let chromeGlassTint = Color.primary.opacity(0.025)
+    static let glassTint = Color.primary.opacity(0.010)
+    static let chromeGlassTint = Color.primary.opacity(0.018)
+    // 阅读型浮层需要压住底层图表和选中行的颜色折射；仍使用 Liquid Glass，只提高中性染色保证长文本清晰。
+    static let floatingGlassTint = Color(nsColor: .windowBackgroundColor).opacity(0.42)
     static let cornerRadius: CGFloat = 8
+    static let floatingCornerRadius: CGFloat = 12
     static let contentPadding: CGFloat = 20
+    static let compactContentPadding: CGFloat = 16
+    static let sidebarWidth: CGFloat = 208
+    static let pageHeaderHeight: CGFloat = 64
+    static let controlHeight: CGFloat = 32
+    static let tableRowHeight: CGFloat = 52
     static let mainWindowMinimumSize = CGSize(width: 1_040, height: 680)
+
+    // 字体角色集中定义后，页面不再各自使用难以辨认的 8～10pt 字号。
+    static let pageTitleFont = Font.system(size: 20, weight: .semibold)
+    static let sectionTitleFont = Font.system(size: 13, weight: .semibold)
+    static let bodyFont = Font.system(size: 12)
+    static let bodyEmphasizedFont = Font.system(size: 12, weight: .medium)
+    static let captionFont = Font.system(size: 11)
+    static let metricFont = Font.system(size: 20, weight: .semibold, design: .rounded)
 
     /// 离屏位图没有 WindowServer（窗口合成服务）上下文，必须使用传统材质才能生成可读 QA 截图。
     static var usesOffscreenMaterialFallback: Bool {
@@ -43,21 +62,25 @@ enum AppTheme {
 
 /// 在整个工作区后方提供宽幅色带，让透明材质能呈现真实折射而不干扰数据阅读。
 struct SubPilotWindowBackdrop: View {
+    var showsSidebarTint = true
+
     /// 使用静态低透明度色带为玻璃提供折射层次，避免大半径实时模糊拖慢窗口滚动和缩放。
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 AppTheme.canvas
 
-                // 左侧色带的几何尺寸只随窗口变化，不需要每帧重新执行昂贵的高斯模糊。
-                Rectangle()
-                    .fill(AppTheme.accent.opacity(0.055))
-                    .frame(width: min(240, proxy.size.width * 0.20))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // 左侧仅保留极淡静态色带，为侧栏玻璃提供折射层次且不会把工作区染成单一青色。
+                if showsSidebarTint {
+                    Rectangle()
+                        .fill(AppTheme.accent.opacity(0.020))
+                        .frame(width: min(AppTheme.sidebarWidth + 36, proxy.size.width * 0.22))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 // 底部横带使用固定透明度表达层次，不参与滚动内容的动态采样和模糊计算。
                 Rectangle()
-                    .fill(Color.primary.opacity(0.012))
+                    .fill(Color.primary.opacity(0.008))
                     .frame(height: max(96, proxy.size.height * 0.16))
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
@@ -127,14 +150,7 @@ struct PanelSurfaceModifier: ViewModifier {
             .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                    .stroke(AppTheme.border, lineWidth: 1)
-            }
-            .overlay(alignment: .top) {
-                // 顶部半透明高光区分实体数据面板与后方工作区，但不会伪装成第二层卡片。
-                Rectangle()
-                    .fill(Color.primary.opacity(0.025))
-                    .frame(height: 0.5)
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
+                    .stroke(AppTheme.border, lineWidth: 0.75)
             }
             // 普通数据面板不使用逐层阴影，滚动时只需合成背景和细边框；真正浮层仍保留阴影。
     }
@@ -167,7 +183,7 @@ struct GlassSurfaceModifier: ViewModifier {
                         .stroke(Color.white.opacity(0.34), lineWidth: 0.8)
                         .padding(0.5)
                 }
-                    .shadow(color: Color.black.opacity(addsShadow ? 0.20 : 0), radius: 30, y: 16)
+                .shadow(color: Color.black.opacity(addsShadow ? 0.16 : 0), radius: 24, y: 12)
         } else {
             content
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
@@ -176,7 +192,7 @@ struct GlassSurfaceModifier: ViewModifier {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .stroke(AppTheme.border, lineWidth: 0.75)
                 }
-                .shadow(color: Color.black.opacity(addsShadow ? 0.18 : 0), radius: 24, y: 12)
+                .shadow(color: Color.black.opacity(addsShadow ? 0.14 : 0), radius: 20, y: 10)
         }
     }
 }
@@ -240,7 +256,7 @@ extension View {
     /// 在 macOS 26 使用原生玻璃按钮，旧系统回退到标准边框按钮并保持同一点击尺寸。
     @ViewBuilder
     func subPilotGlassButtonStyle() -> some View {
-        if #available(macOS 26.1, *) {
+        if #available(macOS 26.1, *), !AppTheme.usesOffscreenMaterialFallback {
             self.buttonStyle(.glass(.regular.interactive()))
         } else {
             self.buttonStyle(.bordered)
@@ -250,7 +266,7 @@ extension View {
     /// 主要命令使用更高对比度的原生玻璃按钮，避免依赖自绘渐变或厚重阴影。
     @ViewBuilder
     func subPilotProminentGlassButtonStyle() -> some View {
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, *), !AppTheme.usesOffscreenMaterialFallback {
             self.buttonStyle(.glassProminent)
                 .tint(AppTheme.accent)
         } else {
