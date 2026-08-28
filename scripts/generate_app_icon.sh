@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 文件说明：从高分辨率源图生成 CodexTools 的完整 macOS ICNS 图标资源
+# 文件说明：从高分辨率源图生成 SubPilot 的完整 macOS ICNS 图标资源
 # 作者：dingyi60(Codex)
 # 创建时间：2026-08-26
 
 set -euo pipefail
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly SOURCE_ICON="${PROJECT_ROOT}/Resources/AppIconSource/AppIcon-1024.png"
+readonly SOURCE_ICON="${PROJECT_ROOT}/Resources/AppIconSource/SubPilot-1024.png"
 readonly NORMALIZED_ICON="${PROJECT_ROOT}/Resources/AppIconSource/AppIcon.png"
 readonly ICONSET_DIR="${PROJECT_ROOT}/Resources/AppIcon.iconset"
 readonly OUTPUT_ICON="${PROJECT_ROOT}/Resources/AppIcon.icns"

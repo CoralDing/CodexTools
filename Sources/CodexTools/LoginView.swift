@@ -81,12 +81,8 @@ struct LoginView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 9) {
-                Image(systemName: "gauge.with.dots.needle.67percent")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 30, height: 30)
-                    .background(AppTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
-                Text("CodexTools")
+                SubPilotBrandIcon(size: 30)
+                Text("SubPilot")
                     .font(.system(size: 21, weight: .semibold))
             }
 

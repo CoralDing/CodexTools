@@ -20,6 +20,6 @@ struct RootView: View {
             }
         }
         .frame(width: 372)
-        .background(.ultraThinMaterial)
+        .background(SubPilotWindowBackdrop())
     }
 }

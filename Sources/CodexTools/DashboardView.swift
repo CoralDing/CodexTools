@@ -33,7 +33,7 @@ struct DashboardView: View {
             Divider()
             footer
         }
-        .frame(minHeight: 680)
+        .frame(minHeight: 740)
         .background(.ultraThinMaterial)
     }
 
@@ -41,10 +41,8 @@ struct DashboardView: View {
     private var header: some View {
         HStack(spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "gauge.with.dots.needle.67percent")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                Text("CodexTools")
+                SubPilotBrandIcon(size: 24)
+                Text("SubPilot")
                     .font(.system(size: 17, weight: .semibold))
             }
             Spacer()
@@ -112,6 +110,7 @@ struct DashboardView: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
+        .tint(AppTheme.accent)
         .controlSize(.small)
         .accessibilityLabel("统计周期")
     }
@@ -172,8 +171,8 @@ struct DashboardView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .help("查看余额最近活动")
-                .accessibilityLabel("账户余额 \(currency(snapshot.balance))，查看最近活动")
+                .help("查看余额增加记录")
+                .accessibilityLabel("账户余额 \(currency(snapshot.balance))，查看余额增加记录")
                 .popover(isPresented: $showsBalanceActivities, arrowEdge: .trailing) {
                     BalanceActivityView(balance: snapshot.balance)
                         .environmentObject(appState)
@@ -193,34 +192,9 @@ struct DashboardView: View {
             .frame(width: 118, alignment: .leading)
 
             Divider()
-                .frame(height: 88)
+                .frame(height: snapshot.primaryPlatformQuota == nil ? 88 : 132)
 
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("订阅额度")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(percent(snapshot.quotaProgress))
-                        .font(.system(size: 11, weight: .semibold))
-                        .monospacedDigit()
-                }
-
-                Text(currency(snapshot.quotaTotal))
-                    .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-
-                quotaProgressBar(snapshot.quotaProgress)
-
-                HStack {
-                    Text("已用 \(currency(snapshot.quotaUsed))")
-                    Spacer()
-                    Text("剩余 \(currency(snapshot.quotaRemaining))")
-                }
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            }
+            dashboardQuotaSummary(snapshot)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
@@ -231,7 +205,75 @@ struct DashboardView: View {
         }
     }
 
-    /// 打开余额活动弹窗，并并行读取最新的 Sub2API 入账、调整和调用扣费记录。
+    /// 菜单栏面板使用两条紧凑额度行，数据口径与主窗口完全一致。
+    private func dashboardQuotaSummary(_ snapshot: DashboardSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("\(snapshot.primaryPlatformQuota?.displayName ?? "订阅") 平台额度")
+                .font(.system(size: 11, weight: .semibold))
+
+            if let quota = snapshot.primaryPlatformQuota,
+               quota.weekly != nil || quota.monthly != nil {
+                if let weekly = quota.weekly {
+                    dashboardQuotaRow("周", weekly)
+                }
+                if let monthly = quota.monthly {
+                    dashboardQuotaRow("月（近 30 天）", monthly)
+                }
+            } else {
+                HStack {
+                    Text("已用 \(currency(snapshot.quotaUsed))")
+                    Spacer()
+                    Text("共 \(currency(snapshot.quotaTotal))")
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                quotaProgressBar(snapshot.quotaProgress)
+            }
+        }
+    }
+
+    /// 窄面板额度行将金额和进度放在同一视觉组，重置时间单独占一行避免拥挤。
+    private func dashboardQuotaRow(_ title: String, _ window: PlatformQuotaWindow) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 10, weight: .medium))
+                Spacer()
+                Text("\(UsageFormatter.cost(window.used)) / \(UsageFormatter.cost(window.limit))")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            ProgressView(value: window.progress ?? 0)
+                .tint((window.progress ?? 0) >= 0.9 ? AppTheme.warning : AppTheme.accent)
+                .controlSize(.mini)
+            Text("\(formattedQuotaReset(window.resetsAt)) · \(selectedTimeZone.identifier)")
+                .font(.system(size: 8))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+    }
+
+    /// 将服务端额度重置时间转换成设置中选择的时区。
+    private func formattedQuotaReset(_ value: String?) -> String {
+        guard let value else { return "暂未提供重置时间" }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        guard let date = fractional.date(from: value) ?? standard.date(from: value) else {
+            return value
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = selectedTimeZone
+        formatter.dateFormat = "M/d HH:mm 重置"
+        return formatter.string(from: date)
+    }
+
+    /// 打开余额增加弹窗，并读取最新的 Sub2API 充值、兑换和人工加款记录。
     private func presentBalanceActivities() {
         showsBalanceActivities = true
         Task { await appState.loadBalanceActivities(force: true) }
@@ -539,7 +581,7 @@ struct DashboardView: View {
             Menu {
                 Button("退出登录", role: .destructive, action: appState.logout)
                 Divider()
-                Button("退出 CodexTools") {
+                Button("退出 SubPilot") {
                     NSApplication.shared.terminate(nil)
                 }
             } label: {

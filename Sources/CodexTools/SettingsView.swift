@@ -48,7 +48,7 @@ struct SettingsView: View {
             footer
         }
         .frame(width: 420, height: 660)
-        .background(.ultraThinMaterial)
+        .background(SubPilotWindowBackdrop())
     }
 
     /// 消耗分析使用独立开关；关闭后立即停止后台任务，且不会连带关闭设置窗口。
@@ -91,7 +91,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, AppTheme.contentPadding)
         .frame(height: 56)
-        .background(.ultraThinMaterial)
+        .glassChromeSurface()
     }
 
     /// 菜单栏摘要用两个独立开关组合；全部关闭时仅保留应用图标，避免另设冗余模式控件。
@@ -213,7 +213,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, AppTheme.contentPadding)
         .frame(height: 58)
-        .background(.ultraThinMaterial)
+        .glassChromeSurface()
     }
 
     /// 分组标题使用小号次级文字，与主标题形成明确但克制的层级。
@@ -290,7 +290,7 @@ private struct SettingsGroupStyle: ViewModifier {
     /// 为所有设置分组应用一致的背景、边框和圆角。
     func body(content: Content) -> some View {
         content
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+            .background(AppTheme.contentCanvas, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
                     .stroke(AppTheme.border, lineWidth: 1)

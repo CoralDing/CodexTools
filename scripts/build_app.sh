@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 文件说明：编译并组装可直接运行的 CodexTools.app
+# 文件说明：编译并组装可直接运行的 SubPilot.app
 # 作者：dingyi60(Codex)
 # 创建时间：2026-08-25
 
 set -euo pipefail
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly APP_BUNDLE="${PROJECT_ROOT}/dist/CodexTools.app"
+readonly APP_BUNDLE="${PROJECT_ROOT}/dist/SubPilot.app"
 readonly CONTENTS_DIR="${APP_BUNDLE}/Contents"
 readonly MACOS_DIR="${CONTENTS_DIR}/MacOS"
 readonly RESOURCES_DIR="${CONTENTS_DIR}/Resources"

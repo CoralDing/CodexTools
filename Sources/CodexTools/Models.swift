@@ -260,6 +260,13 @@ enum UsageFormatter {
         return "$" + value.formatted(.number.precision(.fractionLength(fractionLength)))
     }
 
+    /// 根据单次账单的费用与 Token 数反算每百万 Token 单价；没有 Token 时不展示误导性的零价格。
+    static func tokenPricePerMillion(cost: Double, tokens: Double) -> String {
+        guard cost.isFinite, tokens.isFinite, tokens > 0 else { return "—" }
+        let price = cost / tokens * 1_000_000
+        return "$" + price.formatted(.number.precision(.fractionLength(4))) + " / 1M Token"
+    }
+
     /// 余额活动使用正负号区分入账和扣减；零金额不显示误导性的符号。
     static func balanceChange(_ value: Double) -> String {
         let formattedCost = cost(abs(value))
@@ -316,22 +323,12 @@ struct UsageRecord: Sendable, Equatable {
     let billingMode: String?
 }
 
-/// 区分余额增加、调用消费和人工调整，让弹窗可以使用一致的颜色与图标语义。
-enum BalanceActivityKind: Sendable, Equatable {
-    case usage
-    case recharge
-    case adjustment
-}
-
-/// 表示来自用量、兑换记录或支付订单的一条统一余额变动。
+/// 表示兑换、充值或人工加款产生的一次余额增加活动。
 struct BalanceActivity: Sendable, Equatable {
     let createdAt: Date
-    let kind: BalanceActivityKind
     let title: String
     let detail: String
     let amountChange: Double
-    let totalTokens: Double?
-    let durationMilliseconds: Double?
 }
 
 /// 表示 Sub2API 分页调用记录中的一页，页数用于判断是否需要继续向前读取。
@@ -359,6 +356,82 @@ struct ConsumptionAnalysis: Codable, Sendable, Equatable {
     let averageResponseMilliseconds: Double?
     let inconsistentRequestCount: Int
     let isTruncated: Bool
+}
+
+/// 表示平台额度的一个统计窗口，例如周额度或近 30 天月额度。
+struct PlatformQuotaWindow: Codable, Sendable, Equatable {
+    let used: Double
+    let limit: Double?
+    let resetsAt: String?
+
+    /// 额度为零表示服务端明确禁用该窗口；空额度表示管理员没有配置限制。
+    var progress: Double? {
+        guard let limit, limit > 0 else { return nil }
+        return min(max(used / limit, 0), 1)
+    }
+
+    /// 剩余额度在模型层统一计算，避免主窗口和菜单栏出现不同的负数处理。
+    var remaining: Double? {
+        guard let limit else { return nil }
+        return max(limit - used, 0)
+    }
+}
+
+/// 保存 Sub2API 按平台配置的日、周、月额度，当前重点展示 OpenAI 平台。
+struct PlatformQuota: Codable, Sendable, Equatable, Identifiable {
+    let platform: String
+    let daily: PlatformQuotaWindow?
+    let weekly: PlatformQuotaWindow?
+    let monthly: PlatformQuotaWindow?
+
+    var id: String { platform }
+
+    /// 使用面向用户的名称，兼容 Sub2API 返回的内部平台标识。
+    var displayName: String {
+        switch platform.lowercased() {
+        case "anthropic": return "Claude"
+        case "openai": return "OpenAI"
+        case "gemini": return "Gemini"
+        case "antigravity": return "Antigravity"
+        case "grok": return "grok"
+        default: return platform
+        }
+    }
+}
+
+/// 将 `/user/platform-quotas` 的直接字段转换成稳定的平台额度模型。
+enum PlatformQuotaParser {
+    /// 只读取每个平台对象自身字段，防止不同平台的同名额度被递归解析混用。
+    static func parse(_ response: JSONValue?) -> [PlatformQuota] {
+        guard let response else { return [] }
+        let items = response.directValue(forKey: "platform_quotas")?.arrayValue
+            ?? response.firstValue(forKeys: ["platform_quotas"])?.arrayValue
+            ?? response.arrayValue
+            ?? []
+
+        return items.compactMap { item in
+            guard let platform = item.directValue(forKey: "platform")?.stringValue,
+                  !platform.isEmpty else {
+                return nil
+            }
+
+            return PlatformQuota(
+                platform: platform,
+                daily: window(named: "daily", in: item),
+                weekly: window(named: "weekly", in: item),
+                monthly: window(named: "monthly", in: item)
+            )
+        }
+    }
+
+    /// 即使仅配置了用量也保留窗口；限额为空时界面会显示“未限制”而不是丢失平台。
+    private static func window(named name: String, in item: JSONValue) -> PlatformQuotaWindow? {
+        let limit = item.directValue(forKey: "\(name)_limit_usd")?.doubleValue
+        let used = item.directValue(forKey: "\(name)_usage_usd")?.doubleValue
+        let resetsAt = item.directValue(forKey: "\(name)_window_resets_at")?.stringValue
+        guard limit != nil || used != nil || resetsAt != nil else { return nil }
+        return PlatformQuotaWindow(used: used ?? 0, limit: limit, resetsAt: resetsAt)
+    }
 }
 
 /// 把宽容的 JSON（接口结构化数据）分页响应转换成可分析的调用记录。
@@ -403,28 +476,27 @@ enum UsageRecordParser {
 
     /// 同时兼容带小数秒和普通 ISO 8601（国际标准时间格式）的创建时间。
     private static func parseDate(_ value: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: value) { return date }
-
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        return standard.date(from: value)
+        if let date = try? fractionalDateFormat.parse(value) { return date }
+        return try? standardDateFormat.parse(value)
     }
+
+    /// 最近一小时可能包含大量账单记录，复用不可变策略可显著减少一次分析中的对象分配。
+    private static let fractionalDateFormat = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+    /// 普通秒精度时间使用独立不可变策略，保证兼容性同时避免重复初始化。
+    private static let standardDateFormat = Date.ISO8601FormatStyle()
 }
 
-/// 将 Sub2API 分散在三个只读接口中的余额变动合并为统一、倒序的活动列表。
+/// 将 Sub2API 的兑换和支付记录转换为按时间倒序排列的余额增加列表。
 enum BalanceActivityParser {
-    /// 合并调用扣费、兑换/人工调整和已完成充值订单，最终只保留最近指定条数。
+    /// 只保留正数余额变动，明确排除模型调用消费和人工扣减。
     static func parse(
-        usageResponse: JSONValue?,
         redeemResponse: JSONValue?,
         paymentResponse: JSONValue?,
         limit: Int = 20
     ) -> [BalanceActivity] {
         let normalizedLimit = min(max(limit, 1), 100)
-        let activities = usageActivities(from: usageResponse)
-            + redeemActivities(from: redeemResponse)
+        let activities = redeemActivities(from: redeemResponse)
             + paymentActivities(from: paymentResponse)
         return Array(
             activities
@@ -433,23 +505,7 @@ enum BalanceActivityParser {
         )
     }
 
-    /// 将每条调用的实际成本转换为负数余额变动，并保留核对所需的模型与性能数据。
-    private static func usageActivities(from response: JSONValue?) -> [BalanceActivity] {
-        guard let response else { return [] }
-        return UsageRecordParser.parsePage(response).records.map { record in
-            BalanceActivity(
-                createdAt: record.createdAt,
-                kind: .usage,
-                title: record.model,
-                detail: "模型调用",
-                amountChange: -max(record.actualCost, 0),
-                totalTokens: record.totalTokens,
-                durationMilliseconds: record.durationMilliseconds
-            )
-        }
-    }
-
-    /// 兑换历史只保留会改变余额的类型，排除并发数和订阅等非余额事件。
+    /// 兑换历史只接受正数余额类型，过滤并发、订阅和管理员扣减记录。
     private static func redeemActivities(from response: JSONValue?) -> [BalanceActivity] {
         guard let response else { return [] }
         return responseArray(response, preferredKeys: ["items", "records", "list", "data"])
@@ -457,6 +513,7 @@ enum BalanceActivityParser {
                 guard let type = item.directValue(forKey: "type")?.stringValue,
                       ["balance", "admin_balance", "affiliate_balance"].contains(type),
                       let value = item.directValue(forKey: "value")?.doubleValue,
+                      value > 0,
                       let date = eventDate(item, preferredKeys: ["used_at", "created_at"]) else {
                     return nil
                 }
@@ -468,26 +525,23 @@ enum BalanceActivityParser {
                     title = "兑换码充值"
                     detail = "兑换记录"
                 case "affiliate_balance":
-                    title = value >= 0 ? "推广余额转入" : "推广余额转出"
+                    title = "推广余额转入"
                     detail = "推广余额"
                 default:
-                    title = value >= 0 ? "管理员增加余额" : "管理员扣减余额"
+                    title = "管理员增加余额"
                     detail = "余额调整"
                 }
 
                 return BalanceActivity(
                     createdAt: date,
-                    kind: type == "balance" ? .recharge : .adjustment,
                     title: title,
                     detail: detail,
-                    amountChange: value,
-                    totalTokens: nil,
-                    durationMilliseconds: nil
+                    amountChange: value
                 )
             }
     }
 
-    /// 支付订单仅把已完成的余额订单视为入账，忽略待支付、失败和订阅订单。
+    /// 支付订单只把已完成的余额订单视为入账，忽略待支付、失败和订阅订单。
     private static func paymentActivities(from response: JSONValue?) -> [BalanceActivity] {
         guard let response else { return [] }
         return responseArray(response, preferredKeys: ["items", "records", "list", "data"])
@@ -495,6 +549,7 @@ enum BalanceActivityParser {
                 guard item.directValue(forKey: "order_type")?.stringValue == "balance",
                       item.directValue(forKey: "status")?.stringValue == "completed",
                       let amount = item.directValue(forKey: "amount")?.doubleValue,
+                      amount > 0,
                       let date = eventDate(
                         item,
                         preferredKeys: ["completed_at", "paid_at", "created_at"]
@@ -505,12 +560,9 @@ enum BalanceActivityParser {
                     .flatMap { $0.isEmpty ? nil : $0 }
                 return BalanceActivity(
                     createdAt: date,
-                    kind: .recharge,
                     title: "余额充值",
                     detail: paymentType ?? "支付订单",
-                    amountChange: max(amount, 0),
-                    totalTokens: nil,
-                    durationMilliseconds: nil
+                    amountChange: amount
                 )
             }
     }
@@ -530,16 +582,17 @@ enum BalanceActivityParser {
     private static func eventDate(_ item: JSONValue, preferredKeys: [String]) -> Date? {
         for key in preferredKeys {
             guard let value = item.directValue(forKey: key)?.stringValue else { continue }
-            let fractional = ISO8601DateFormatter()
-            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = fractional.date(from: value) { return date }
-
-            let standard = ISO8601DateFormatter()
-            standard.formatOptions = [.withInternetDateTime]
-            if let date = standard.date(from: value) { return date }
+            if let date = try? fractionalDateFormat.parse(value) { return date }
+            if let date = try? standardDateFormat.parse(value) { return date }
         }
         return nil
     }
+
+    /// 余额活动同样批量解析时间，复用不可变策略避免打开弹窗时产生重复初始化开销。
+    private static let fractionalDateFormat = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+    /// 秒精度余额活动使用独立不可变解析策略。
+    private static let standardDateFormat = Date.ISO8601FormatStyle()
 }
 
 /// 使用本地 Codex 会话成本和 Sub2API 实际扣费计算综合倍率，并核对两侧调用数量。
@@ -656,6 +709,7 @@ struct DashboardSnapshot: Codable, Sendable, Equatable {
     var concurrencyLimit: Double?
     var quotaUsed: Double?
     var quotaTotal: Double?
+    var platformQuotas: [PlatformQuota] = []
     var periodTokens: Double?
     var requestCount: Double?
     var usageCost: Double?
@@ -669,6 +723,12 @@ struct DashboardSnapshot: Codable, Sendable, Equatable {
     var resetSyncedAt: Date?
     var displayTimeZone: String
     var refreshedAt: Date
+
+    /// 优先选择 OpenAI 平台；旧部署只返回其他平台时仍展示第一个有效额度。
+    var primaryPlatformQuota: PlatformQuota? {
+        platformQuotas.first { $0.platform.caseInsensitiveCompare("openai") == .orderedSame }
+            ?? platformQuotas.first { $0.daily != nil || $0.weekly != nil || $0.monthly != nil }
+    }
 
     /// 返回 0 到 1 之间的额度使用比例；缺少有效总额度时不显示进度条数据。
     var quotaProgress: Double? {
@@ -696,6 +756,7 @@ enum DashboardParser {
         profile: JSONValue?,
         subscriptionSummary: JSONValue?,
         subscriptionProgress: JSONValue?,
+        platformQuotas: JSONValue? = nil,
         usageStats: JSONValue?,
         modelStats: JSONValue?,
         usagePeriod: UsagePeriod = .today,
@@ -706,11 +767,18 @@ enum DashboardParser {
             in: profile,
             keys: ["concurrency", "concurrency_limit", "max_concurrency"]
         )
-        let quotaTotal = number(
+        let parsedPlatformQuotas = PlatformQuotaParser.parse(platformQuotas)
+        let primaryPlatformQuota = parsedPlatformQuotas.first {
+            $0.platform.caseInsensitiveCompare("openai") == .orderedSame
+        } ?? parsedPlatformQuotas.first
+        let preferredQuotaWindow = primaryPlatformQuota?.weekly
+            ?? primaryPlatformQuota?.monthly
+            ?? primaryPlatformQuota?.daily
+        let quotaTotal = preferredQuotaWindow?.limit ?? number(
             in: subscriptionSummary,
             keys: ["quota", "total_quota", "quota_total", "limit", "amount"]
         ) ?? number(in: subscriptionProgress, keys: ["quota", "total_quota", "quota_total", "limit"])
-        let quotaUsed = number(
+        let quotaUsed = preferredQuotaWindow?.used ?? number(
             in: subscriptionProgress,
             keys: ["used", "used_quota", "quota_used", "usage", "usage_usd"]
         ) ?? number(in: subscriptionSummary, keys: ["used", "used_quota", "quota_used", "usage"])
@@ -738,6 +806,7 @@ enum DashboardParser {
             concurrencyLimit: concurrencyLimit,
             quotaUsed: quotaUsed,
             quotaTotal: quotaTotal,
+            platformQuotas: parsedPlatformQuotas,
             periodTokens: periodTokens,
             requestCount: requestCount,
             usageCost: usageCost,

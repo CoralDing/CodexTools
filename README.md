@@ -1,20 +1,25 @@
 <!--
-文件说明：CodexTools 项目说明与本地运行指南
+文件说明：SubPilot 项目说明与本地运行指南
 作者：dingyi60(Codex)
 创建时间：2026-08-25
 -->
 
-# CodexTools
+# SubPilot
 
-CodexTools 是一个独立运行在 macOS 的 Sub2API 用量查看工具，提供完整操作窗口与菜单栏快捷面板，不依赖 Codex 或其他宿主应用。
+SubPilot 是一个独立运行在 macOS 的 Sub2API 原生客户端，提供完整操作窗口与菜单栏快捷面板，不依赖 Codex、浏览器仪表盘或其他宿主应用。仓库继续沿用 CodexTools 名称以保持历史链接稳定。
 
-![CodexTools 主窗口](Design/codextools-glass-final-main.png)
+![SubPilot 主窗口](Design/subpilot-main.png)
 
 ## 当前能力
 
 - 使用用户输入的 Sub2API 服务地址、邮箱和密码登录，不内置任何中转站地址。
 - 将访问令牌和刷新令牌保存在 Keychain（macOS 系统安全凭据存储）中，不保存登录密码。
-- 在主窗口和菜单栏悬浮层展示余额、订阅额度、Token（模型处理文本的计量单位）、请求数、消费金额、平均响应时间和最近使用模型。
+- 直接管理 API 密钥，支持创建、搜索、复制、启停和删除确认。
+- 查看最新使用记录、模型、Token（模型处理文本的计量单位）、实际扣费、标准费用、倍率和响应时间。
+- 查看用户可见的渠道状态、订阅计划，并直接兑换余额、并发或订阅兑换码。
+- 在应用内修改用户名和密码，日常使用不需要登录 Sub2API 网页端。
+- 在主窗口和菜单栏悬浮层展示余额、并发限制、请求数、消费金额、平均响应时间和最近使用模型。
+- 通过 `/api/v1/user/platform-quotas` 展示 OpenAI 周额度和月（近 30 天）额度，并分别显示服务端重置时间和时区。
 - 统计周期默认“今天”，也可切换近 7 天或近 30 天，并按所选时区计算自然日范围。
 - 菜单栏可显示紧凑 Token（例如 `1.28M`）、消费金额或两者；关闭两个选项后仅显示图标。
 - 每小时读取 CC Switch 从本地 Codex 会话同步的调用与标准成本，对比 Sub2API 实际扣费并计算真实综合倍率。
@@ -25,10 +30,10 @@ CodexTools 是一个独立运行在 macOS 的 Sub2API 用量查看工具，提�
 
 ```bash
 ./scripts/build_app.sh
-open dist/CodexTools.app
+open dist/SubPilot.app
 ```
 
-打包脚本会生成本地临时签名的 `dist/CodexTools.app`。首次启用提醒时，macOS 会请求通知权限。应用提供主操作窗口，也可以从菜单栏随时快速查看用量。
+构建脚本会生成本地临时签名的 `dist/SubPilot.app`。首次启用提醒时，macOS 会请求通知权限。应用提供主操作窗口，也可以从菜单栏随时快速查看用量。
 
 ## DMG 安装包
 
@@ -36,7 +41,7 @@ open dist/CodexTools.app
 ./scripts/package_dmg.sh
 ```
 
-脚本会依次生成应用图标、构建发布版应用，并输出 `dist/CodexTools-<版本>-macos-<架构>.dmg`。打开 DMG（macOS 磁盘映像安装包）后，将 `CodexTools.app` 拖到“Applications”即可完成安装。
+脚本会依次生成应用图标、构建发布版应用，并输出 `dist/SubPilot-<版本>-macos-<架构>.dmg`。打开 DMG（macOS 磁盘映像安装包）后，将 `SubPilot.app` 拖到“Applications”即可完成安装。
 
 ## 验证
 
@@ -47,8 +52,7 @@ swift test
 ## 目录
 
 - `Sources/CodexTools`：原生 SwiftUI（苹果声明式界面框架）应用。
-- `Resources/AppIconSource/AppIcon-1024.png`：应用图标高分辨率源图。
+- `Resources/AppIconSource/SubPilot-1024.png`：SubPilot 应用图标高分辨率源图。
 - `Resources/AppIcon.icns`：Finder 和应用包使用的 macOS 多尺寸图标。
-- `Design/codextools-glass-concept.png`：玻璃界面概念规格图。
-- `Design/codextools-glass-final-main.png`：最终主窗口预览。
-- `Design/codextools-glass-final-menu.png`：最终菜单栏面板预览。
+- `Design/subpilot-main.png`：SubPilot 0.2.0 主窗口预览。
+- `Design/subpilot-menu.png`：SubPilot 0.2.0 菜单栏面板预览。

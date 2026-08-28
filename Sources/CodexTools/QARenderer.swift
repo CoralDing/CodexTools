@@ -72,13 +72,87 @@ enum QARenderer {
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             return RenderTarget(
                 view: AnyView(RootView().environmentObject(state)),
-                size: CGSize(width: 372, height: 680)
+                size: CGSize(width: 372, height: 740)
             )
         case "main":
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             return RenderTarget(
                 view: AnyView(MainWindowView().environmentObject(state)),
-                size: CGSize(width: 920, height: 680)
+                size: CGSize(width: 1_120, height: 760)
+            )
+        case "main-api-keys":
+            let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            return RenderTarget(
+                view: AnyView(MainWindowView(initialSection: .apiKeys).environmentObject(state)),
+                size: CGSize(width: 1_120, height: 760)
+            )
+        case "main-api-key-usage":
+            let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            return RenderTarget(
+                view: AnyView(
+                    ZStack {
+                        MainWindowView(initialSection: .apiKeys)
+                            .environmentObject(state)
+                        Color.black.opacity(0.045)
+                        APIKeyUsageSheet(
+                            key: makePreviewAPIKey(),
+                            serverURL: URL(string: "https://sub2api.example")!,
+                            suggestedModel: "gpt-5.6-sol",
+                            previewResult: APIKeyImportResult(
+                                message: "已导入 CC Switch",
+                                detail: "已添加 Codex 与 Claude 供应商，当前供应商未切换。备份：/Users/example/.cc-switch/subpilot-backups/2026-08-28-120000/cc-switch.db"
+                            )
+                        )
+                        // 检查器贴近窗口右侧，位置与真实 API 密钥页面中的右对齐浮层保持一致。
+                        .offset(x: 286, y: 44)
+                    }
+                ),
+                size: CGSize(width: 1_120, height: 760)
+            )
+        case "api-key-usage":
+            return RenderTarget(
+                view: AnyView(
+                    APIKeyUsageSheet(
+                        key: makePreviewAPIKey(),
+                        serverURL: URL(string: "https://sub2api.example")!,
+                        suggestedModel: "gpt-5.6-sol"
+                    )
+                ),
+                size: CGSize(width: 680, height: 568)
+            )
+        case "api-key-usage-result":
+            return RenderTarget(
+                view: AnyView(
+                    APIKeyUsageSheet(
+                        key: makePreviewAPIKey(),
+                        serverURL: URL(string: "https://sub2api.example")!,
+                        suggestedModel: "gpt-5.6-sol",
+                        previewResult: APIKeyImportResult(
+                            message: "已导入 CC Switch",
+                            detail: "已添加 Codex 与 Claude 供应商，当前供应商未切换。备份：/Users/example/.cc-switch/subpilot-backups/2026-08-28-120000/cc-switch.db"
+                        )
+                    )
+                ),
+                size: CGSize(width: 680, height: 568)
+            )
+        case "main-usage":
+            let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            return RenderTarget(
+                view: AnyView(MainWindowView(initialSection: .usage).environmentObject(state)),
+                size: CGSize(width: 1_120, height: 760)
+            )
+        case "main-usage-detail":
+            let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            state.showQAPreviewUsageDetail()
+            return RenderTarget(
+                view: AnyView(MainWindowView(initialSection: .usage).environmentObject(state)),
+                size: CGSize(width: 1_120, height: 760)
+            )
+        case "main-profile":
+            let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            return RenderTarget(
+                view: AnyView(MainWindowView(initialSection: .profile).environmentObject(state)),
+                size: CGSize(width: 1_120, height: 760)
             )
         case "settings":
             let state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
@@ -102,6 +176,31 @@ enum QARenderer {
                 size: CGSize(width: 372, height: 480)
             )
         }
+    }
+
+    /// 使用完全虚拟的密钥渲染导入弹窗，视觉检查不会读取或暴露用户的真实凭据。
+    static func makePreviewAPIKey() -> UserAPIKey {
+        UserAPIKey(
+            id: 99,
+            name: "Codex 主密钥",
+            key: "sk-subpilot-preview-1234",
+            groupName: "OpenAI",
+            currentConcurrency: 1,
+            quota: 100,
+            quotaUsed: 24.8,
+            status: "active",
+            expiresAt: nil,
+            createdAt: nil,
+            lastUsedAt: nil,
+            ipWhitelist: [],
+            ipBlacklist: [],
+            rateLimit5Hours: 0,
+            rateLimit1Day: 0,
+            rateLimit7Days: 0,
+            usage5Hours: 0,
+            usage1Day: 0,
+            usage7Days: 0
+        )
     }
 
     /// 将类型擦除后的视图和目标尺寸绑定在一起，避免不同状态分支产生泛型冲突。

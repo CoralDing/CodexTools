@@ -25,11 +25,11 @@ struct CodexToolsApp: App {
 
     /// 主窗口承载完整操作，菜单栏负责快速查看，两个界面共享登录和用量状态。
     var body: some Scene {
-        Window("CodexTools", id: "main") {
+        Window("SubPilot", id: "main") {
             MainWindowRootView()
                 .environmentObject(appState)
         }
-        .defaultSize(width: 920, height: 680)
+        .defaultSize(width: 1_120, height: 760)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unifiedCompact)
 
@@ -61,13 +61,13 @@ private struct MenuBarStatusLabel: View {
     var body: some View {
         if metricLines.isEmpty {
             Image(systemName: "gauge.with.dots.needle.67percent")
-                .help("CodexTools")
+                .help("SubPilot")
         } else {
             // MenuBarExtra 会丢弃多行文本的第二行，因此合成为单个模板图像交给系统状态项绘制。
             Image(nsImage: MenuBarStatusImage.make(token: tokenMetric, cost: costMetric))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilitySummary)
-            .help("CodexTools · \(metricLines.joined(separator: " · "))")
+            .help("SubPilot · \(metricLines.joined(separator: " · "))")
         }
     }
 
@@ -90,8 +90,8 @@ private struct MenuBarStatusLabel: View {
 
     /// 为辅助功能提供完整语义，视觉上的两行缩写不会降低屏幕阅读器可理解性。
     private var accessibilitySummary: String {
-        guard let snapshot else { return "CodexTools" }
-        var parts: [String] = ["CodexTools"]
+        guard let snapshot else { return "SubPilot" }
+        var parts: [String] = ["SubPilot"]
         if showsTokens, snapshot.periodTokens != nil {
             parts.append("Token \(UsageFormatter.compactTokens(snapshot.periodTokens))")
         }

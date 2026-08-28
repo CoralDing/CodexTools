@@ -54,11 +54,31 @@ final class QAWindowAppDelegate: NSObject, NSApplicationDelegate {
         case "dashboard":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(RootView().environmentObject(state))
-            windowSize = NSSize(width: 372, height: 680)
+            windowSize = NSSize(width: 372, height: 740)
         case "main":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(MainWindowView().environmentObject(state))
-            windowSize = NSSize(width: 920, height: 680)
+            windowSize = NSSize(width: 1_120, height: 760)
+        case "main-api-keys":
+            state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            rootView = AnyView(MainWindowView(initialSection: .apiKeys).environmentObject(state))
+            windowSize = NSSize(width: 1_120, height: 760)
+        case "main-api-key-usage":
+            state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
+            rootView = AnyView(
+                ZStack {
+                    MainWindowView(initialSection: .apiKeys)
+                        .environmentObject(state)
+                    Color.black.opacity(0.22)
+                    APIKeyUsageSheet(
+                        key: QARenderer.makePreviewAPIKey(),
+                        serverURL: URL(string: "https://sub2api.example")!,
+                        suggestedModel: "gpt-5.6-sol"
+                    )
+                    .offset(x: 286, y: 44)
+                }
+            )
+            windowSize = NSSize(width: 1_120, height: 760)
         case "balance-activity":
             state = AppState(previewSnapshot: AppState.makeQAPreviewSnapshot())
             rootView = AnyView(
@@ -73,8 +93,13 @@ final class QAWindowAppDelegate: NSObject, NSApplicationDelegate {
         }
         let controller = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: controller)
-        window.title = "CodexTools QA"
-        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.title = "SubPilot QA"
+        // QA 窗口使用与生产窗口相同的透明全尺寸内容，才能由 WindowServer 合成真实 Liquid Glass。
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.setContentSize(windowSize)
         window.center()
         window.makeKeyAndOrderFront(nil)

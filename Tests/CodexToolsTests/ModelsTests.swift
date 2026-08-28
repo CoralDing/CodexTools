@@ -104,23 +104,122 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(UsageFormatter.concurrencyLimit(0), "不限")
         XCTAssertEqual(UsageFormatter.concurrencyLimit(nil), "—")
         XCTAssertEqual(UsageFormatter.duration(milliseconds: 1_286), "1.29 s")
+        XCTAssertEqual(
+            UsageFormatter.tokenPricePerMillion(cost: 0.003, tokens: 1_000),
+            "$3.0000 / 1M Token"
+        )
+        XCTAssertEqual(UsageFormatter.tokenPricePerMillion(cost: 0.003, tokens: 0), "—")
     }
 
-    /// 验证调用、兑换和充值三类记录会合并为统一余额活动并按事件时间倒序排列。
-    func testBalanceActivityParserMergesAllUserVisibleBalanceSources() throws {
-        let usage: JSONValue = .object([
-            "data": .object([
-                "items": .array([
-                    .object([
-                        "created_at": .string("2026-08-26T01:20:00Z"),
-                        "model": .string("gpt-5.6-sol"),
-                        "input_tokens": .number(100),
-                        "output_tokens": .number(20),
-                        "actual_cost": .number(0.4)
-                    ])
-                ])
-            ])
-        ])
+    /// 验证 Codex 导入只创建独立 Profile 和权限受限密钥文件，不改写默认 config.toml。
+    func testAPIKeyImportCreatesIsolatedCodexProfile() throws {
+        let home = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let codexDirectory = home.appending(path: ".codex", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: codexDirectory, withIntermediateDirectories: true)
+        let defaultConfig = codexDirectory.appending(path: "config.toml")
+        try Data("model = \"existing\"\n".utf8).write(to: defaultConfig)
+
+        let result = try APIKeyClientImportService.importKey(
+            makePortalAPIKey(),
+            serverURL: URL(string: "https://sub2api.example")!,
+            model: "gpt-test",
+            target: .codex,
+            paths: APIKeyImportPaths(homeDirectory: home)
+        )
+
+        let profile = try String(contentsOf: codexDirectory.appending(path: "subpilot.config.toml"), encoding: .utf8)
+        let secret = try String(contentsOf: home.appending(path: ".config/subpilot/api-key-99"), encoding: .utf8)
+        let original = try String(contentsOf: defaultConfig, encoding: .utf8)
+        XCTAssertTrue(profile.contains("model_provider = \"subpilot\""))
+        XCTAssertTrue(profile.contains("base_url = \"https://sub2api.example/v1\""))
+        XCTAssertTrue(profile.contains("command = \"/bin/cat\""))
+        XCTAssertFalse(profile.contains("sk-subpilot-test"))
+        XCTAssertEqual(secret, "sk-subpilot-test\n")
+        XCTAssertEqual(original, "model = \"existing\"\n")
+        XCTAssertEqual(result.message, "已导入 Codex Profile")
+    }
+
+    /// 验证 Claude Code 导入保留既有权限和环境变量，只覆盖 SubPilot 负责的三个字段。
+    func testAPIKeyImportMergesClaudeSettings() throws {
+        let home = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let settingsURL = home.appending(path: ".claude/settings.json")
+        try FileManager.default.createDirectory(at: settingsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let existing = """
+        {"permissions":{"allow":["Bash"]},"env":{"KEEP":"yes"}}
+        """
+        try Data(existing.utf8).write(to: settingsURL)
+
+        _ = try APIKeyClientImportService.importKey(
+            makePortalAPIKey(),
+            serverURL: URL(string: "https://sub2api.example/")!,
+            model: "claude-test",
+            target: .claudeCode,
+            paths: APIKeyImportPaths(homeDirectory: home)
+        )
+
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
+        )
+        let environment = try XCTUnwrap(object["env"] as? [String: String])
+        let permissions = try XCTUnwrap(object["permissions"] as? [String: Any])
+        XCTAssertEqual(environment["KEEP"], "yes")
+        XCTAssertEqual(environment["ANTHROPIC_BASE_URL"], "https://sub2api.example")
+        XCTAssertEqual(environment["ANTHROPIC_AUTH_TOKEN"], "sk-subpilot-test")
+        XCTAssertEqual(environment["ANTHROPIC_MODEL"], "claude-test")
+        XCTAssertEqual(permissions["allow"] as? [String], ["Bash"])
+    }
+
+    /// 验证 CC Switch 导入两个供应商且不改变当前供应商，同时生成可恢复数据库备份。
+    func testAPIKeyImportAddsCCSwitchProvidersWithoutActivatingThem() throws {
+        let home = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let databaseURL = home.appending(path: ".cc-switch/cc-switch.db")
+        try FileManager.default.createDirectory(at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(databaseURL.path, &database), SQLITE_OK)
+        let openedDatabase = try XCTUnwrap(database)
+        let schema = """
+        CREATE TABLE providers (
+            id TEXT NOT NULL, app_type TEXT NOT NULL, name TEXT NOT NULL,
+            settings_config TEXT NOT NULL, website_url TEXT, category TEXT,
+            created_at INTEGER, sort_index INTEGER, notes TEXT, icon TEXT,
+            icon_color TEXT, meta TEXT NOT NULL DEFAULT '{}',
+            is_current BOOLEAN NOT NULL DEFAULT 0,
+            in_failover_queue BOOLEAN NOT NULL DEFAULT 0,
+            cost_multiplier TEXT NOT NULL DEFAULT '1.0',
+            PRIMARY KEY (id, app_type)
+        );
+        INSERT INTO providers (id, app_type, name, settings_config, meta, is_current)
+        VALUES ('existing', 'codex', 'Existing', '{}', '{}', 1);
+        """
+        XCTAssertEqual(sqlite3_exec(openedDatabase, schema, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(openedDatabase)
+        database = nil
+
+        _ = try APIKeyClientImportService.importKey(
+            makePortalAPIKey(),
+            serverURL: URL(string: "https://sub2api.example")!,
+            model: "gpt-test",
+            target: .ccSwitch,
+            paths: APIKeyImportPaths(homeDirectory: home)
+        )
+
+        var verificationDatabase: OpaquePointer?
+        XCTAssertEqual(sqlite3_open_v2(databaseURL.path, &verificationDatabase, SQLITE_OPEN_READONLY, nil), SQLITE_OK)
+        let verified = try XCTUnwrap(verificationDatabase)
+        defer { sqlite3_close(verified) }
+        XCTAssertEqual(sqliteInteger(verified, sql: "SELECT COUNT(*) FROM providers WHERE id = 'subpilot-99'"), 2)
+        XCTAssertEqual(sqliteInteger(verified, sql: "SELECT COUNT(*) FROM providers WHERE is_current = 1"), 1)
+        XCTAssertEqual(sqliteInteger(verified, sql: "SELECT is_current FROM providers WHERE id = 'existing'"), 1)
+        let backupRoot = home.appending(path: ".cc-switch/subpilot-backups")
+        let backups = try FileManager.default.subpathsOfDirectory(atPath: backupRoot.path)
+        XCTAssertTrue(backups.contains { $0.hasSuffix("cc-switch.db") })
+    }
+
+    /// 验证弹窗只保留余额增加记录，并过滤并发兑换和人工扣减。
+    func testBalanceActivityParserUsesOnlyBalanceCredits() throws {
         let redeem: JSONValue = .object([
             "data": .array([
                 .object([
@@ -129,9 +228,14 @@ final class ModelsTests: XCTestCase {
                     "used_at": .string("2026-08-26T01:30:00Z")
                 ]),
                 .object([
+                    "type": .string("admin_balance"),
+                    "value": .number(-2),
+                    "used_at": .string("2026-08-26T01:40:00Z")
+                ]),
+                .object([
                     "type": .string("concurrency"),
                     "value": .number(10),
-                    "used_at": .string("2026-08-26T01:40:00Z")
+                    "used_at": .string("2026-08-26T01:50:00Z")
                 ])
             ])
         ])
@@ -143,21 +247,20 @@ final class ModelsTests: XCTestCase {
                         "status": .string("completed"),
                         "amount": .number(20),
                         "payment_type": .string("alipay"),
-                        "completed_at": .string("2026-08-26T01:10:00Z")
+                        "completed_at": .string("2026-08-26T01:20:00Z")
                     ])
                 ])
             ])
         ])
 
         let activities = BalanceActivityParser.parse(
-            usageResponse: usage,
             redeemResponse: redeem,
             paymentResponse: payments
         )
 
-        XCTAssertEqual(activities.count, 3)
-        XCTAssertEqual(activities.map(\.title), ["管理员增加余额", "gpt-5.6-sol", "余额充值"])
-        XCTAssertEqual(activities.map(\.amountChange), [5, -0.4, 20])
+        XCTAssertEqual(activities.count, 2)
+        XCTAssertEqual(activities.map(\.title), ["管理员增加余额", "余额充值"])
+        XCTAssertEqual(activities.map(\.amountChange), [5, 20])
     }
 
     /// 验证令牌在一分钟内过期时提前刷新，较远过期时间则继续复用。
@@ -414,6 +517,197 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(usage.cacheReadTokens, 800)
         XCTAssertEqual(usage.standardCost, 0.5, accuracy: 0.000_001)
         XCTAssertEqual(usage.latestRecordAt, Date(timeIntervalSince1970: 9_500))
+    }
+
+    /// 验证平台额度接口能同时保留 OpenAI 周额度、月额度及两套独立重置时间。
+    func testPlatformQuotaParserKeepsWeeklyAndMonthlyWindows() throws {
+        let fixture = """
+        {
+          "platform_quotas": [{
+            "platform": "openai",
+            "daily_limit_usd": null,
+            "weekly_limit_usd": 550,
+            "monthly_limit_usd": 2200,
+            "weekly_usage_usd": 0.11,
+            "monthly_usage_usd": 0.02,
+            "weekly_window_resets_at": "2026-08-30T16:00:00Z",
+            "monthly_window_resets_at": "2026-09-27T01:47:00Z"
+          }]
+        }
+        """
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data(fixture.utf8))
+
+        let quotas = PlatformQuotaParser.parse(value)
+        let openAI = try XCTUnwrap(quotas.first)
+
+        XCTAssertEqual(openAI.platform, "openai")
+        XCTAssertEqual(openAI.weekly?.used, 0.11)
+        XCTAssertEqual(openAI.weekly?.limit, 550)
+        XCTAssertEqual(openAI.weekly?.resetsAt, "2026-08-30T16:00:00Z")
+        XCTAssertEqual(openAI.monthly?.used, 0.02)
+        XCTAssertEqual(openAI.monthly?.limit, 2_200)
+        XCTAssertEqual(openAI.monthly?.resetsAt, "2026-09-27T01:47:00Z")
+        XCTAssertEqual(openAI.weekly?.remaining, 549.89)
+    }
+
+    /// 验证仪表盘兼容字段优先采用 OpenAI 周额度，而不是误取订阅总额。
+    func testDashboardParserPrefersOpenAIPlatformWeeklyQuota() throws {
+        let platformFixture = """
+        {"platform_quotas":[{"platform":"openai","weekly_limit_usd":550,"weekly_usage_usd":0.11}]}
+        """
+        let subscriptionFixture = """
+        {"quota_total":5000,"quota_used":4000}
+        """
+        let decoder = JSONDecoder()
+        let platform = try decoder.decode(JSONValue.self, from: Data(platformFixture.utf8))
+        let subscription = try decoder.decode(JSONValue.self, from: Data(subscriptionFixture.utf8))
+
+        let snapshot = DashboardParser.parse(
+            profile: nil,
+            subscriptionSummary: subscription,
+            subscriptionProgress: subscription,
+            platformQuotas: platform,
+            usageStats: nil,
+            modelStats: nil
+        )
+
+        XCTAssertEqual(snapshot.quotaUsed, 0.11)
+        XCTAssertEqual(snapshot.quotaTotal, 550)
+        XCTAssertEqual(snapshot.primaryPlatformQuota?.displayName, "OpenAI")
+    }
+
+    /// 验证用户端分页响应可以解析密钥和真实使用记录，且 Token 口径包含缓存。
+    func testUserPortalParserDecodesKeysAndUsageRecords() throws {
+        let keysFixture = """
+        {"data":{"items":[{
+          "id":7,"name":"Codex","key":"sk-test-1234","status":"active",
+          "current_concurrency":2,"quota":100,"quota_used":12.5,
+          "group":{"name":"OpenAI"},"created_at":"2026-08-28T01:00:00Z"
+        }]}}
+        """
+        let usageFixture = """
+        {"items":[{
+          "id":9,"api_key_id":7,"model":"gpt-5.6-sol","input_tokens":100,
+          "output_tokens":20,"cache_creation_tokens":5,"cache_read_tokens":25,
+          "total_cost":0.20,"actual_cost":0.16,"rate_multiplier":0.8,
+          "duration_ms":1200,"created_at":"2026-08-28T02:00:00Z"
+        }]}
+        """
+        let decoder = JSONDecoder()
+        let keysValue = try decoder.decode(JSONValue.self, from: Data(keysFixture.utf8))
+        let usageValue = try decoder.decode(JSONValue.self, from: Data(usageFixture.utf8))
+
+        let keys = UserPortalParser.apiKeys(from: keysValue)
+        let records = UserPortalParser.usageRecords(from: usageValue)
+
+        XCTAssertEqual(keys.first?.id, 7)
+        XCTAssertEqual(keys.first?.groupName, "OpenAI")
+        XCTAssertEqual(keys.first?.quotaProgress, 0.125)
+        XCTAssertEqual(records.first?.model, "gpt-5.6-sol")
+        XCTAssertEqual(records.first?.totalTokens, 150)
+        XCTAssertEqual(records.first?.actualCost, 0.16)
+    }
+
+    /// 验证使用记录分页元数据和详情字段可以一起解析，滚动加载不会错误判断最后一页。
+    func testUserPortalParserKeepsUsagePaginationAndDetailFields() throws {
+        let fixture = """
+        {
+          "items":[{
+            "id":21,"request_id":"req_21","api_key_id":7,"model":"gpt-5.6-sol",
+            "inbound_endpoint":"/v1/responses","input_tokens":120,"output_tokens":30,
+            "cache_creation_tokens":10,"cache_read_tokens":40,"input_cost":0.02,
+            "output_cost":0.01,"cache_creation_cost":0.003,"cache_read_cost":0.002,
+            "total_cost":0.035,"actual_cost":0.028,"rate_multiplier":0.8,
+            "request_type":"stream","billing_type":1,"billing_mode":"standard",
+            "stream":true,"duration_ms":900,"first_token_ms":240,
+            "created_at":"2026-08-28T02:00:00Z"
+          }],
+          "page":2,"page_size":50,"total":121,"pages":3
+        }
+        """
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data(fixture.utf8))
+
+        let page = UserPortalParser.usagePage(from: value)
+        let record = try XCTUnwrap(page.records.first)
+
+        XCTAssertEqual(page.page, 2)
+        XCTAssertEqual(page.pageSize, 50)
+        XCTAssertEqual(page.total, 121)
+        XCTAssertEqual(page.pages, 3)
+        XCTAssertEqual(record.requestID, "req_21")
+        XCTAssertEqual(record.inputTokens, 120)
+        XCTAssertEqual(record.cacheReadTokens, 40)
+        XCTAssertEqual(record.firstTokenMilliseconds, 240)
+        XCTAssertTrue(record.isStream)
+    }
+
+    /// 验证订阅进度接口会覆盖列表中的旧用量，并保留日、周、月上限与重置倒计时。
+    func testUserPortalParserMergesSubscriptionProgress() throws {
+        let subscriptions = """
+        [{"id":5,"status":"active","daily_usage_usd":1,"weekly_usage_usd":2,
+          "monthly_usage_usd":3,"group":{"name":"OpenAI","daily_limit_usd":100,
+          "weekly_limit_usd":550,"monthly_limit_usd":2200}}]
+        """
+        let progress = """
+        [{"subscription_id":5,"daily":{"used":4,"limit":100,"reset_in_seconds":3600},
+          "weekly":{"used":18,"limit":550,"reset_in_seconds":7200},
+          "monthly":{"used":82,"limit":2200,"reset_in_seconds":10800}}]
+        """
+        let decoder = JSONDecoder()
+        let subscriptionValue = try decoder.decode(JSONValue.self, from: Data(subscriptions.utf8))
+        let progressValue = try decoder.decode(JSONValue.self, from: Data(progress.utf8))
+
+        let item = try XCTUnwrap(
+            UserPortalParser.subscriptions(from: subscriptionValue, progressResponse: progressValue).first
+        )
+
+        XCTAssertEqual(item.dailyUsage, 4)
+        XCTAssertEqual(item.weeklyLimit, 550)
+        XCTAssertEqual(item.monthlyLimit, 2_200)
+        XCTAssertEqual(item.dailyResetInSeconds, 3_600)
+    }
+
+    /// 创建完全隔离的临时用户目录，导入测试不会触碰当前机器上的真实客户端配置。
+    private func makeTemporaryHome() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appending(path: "SubPilotImportTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    /// 创建只包含导入测试所需字段的虚拟 API 密钥，令牌不对应任何真实服务。
+    private func makePortalAPIKey() -> UserAPIKey {
+        UserAPIKey(
+            id: 99,
+            name: "Test Key",
+            key: "sk-subpilot-test",
+            groupName: "OpenAI",
+            currentConcurrency: 0,
+            quota: 0,
+            quotaUsed: 0,
+            status: "active",
+            expiresAt: nil,
+            createdAt: nil,
+            lastUsedAt: nil,
+            ipWhitelist: [],
+            ipBlacklist: [],
+            rateLimit5Hours: 0,
+            rateLimit1Day: 0,
+            rateLimit7Days: 0,
+            usage5Hours: 0,
+            usage1Day: 0,
+            usage7Days: 0
+        )
+    }
+
+    /// 执行只返回单个整数的 SQLite 查询，用于核对供应商数量和当前状态。
+    private func sqliteInteger(_ database: OpaquePointer, sql: String) -> Int {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else { return -1 }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { return -1 }
+        return Int(sqlite3_column_int64(statement, 0))
     }
 
     /// 创建固定的 CC Switch 本地汇总，用来验证分析器不会继续采用 Sub2API 自带标准成本。

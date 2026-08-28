@@ -115,11 +115,12 @@ struct Sub2APIClient: Sendable {
         async let profile = optionalJSON(path: "user/profile", token: token)
         async let subscriptions = optionalJSON(path: "subscriptions/summary", token: token)
         async let progress = optionalJSON(path: "subscriptions/progress", token: token)
+        async let platformQuotas = optionalJSON(path: "user/platform-quotas", token: token)
         async let usage = optionalJSON(path: "usage/stats", token: token, query: dateQuery)
         async let models = optionalJSON(path: "usage/dashboard/models", token: token, query: dateQuery)
 
-        let results = await (profile, subscriptions, progress, usage, models)
-        guard [results.0, results.1, results.2, results.3, results.4].contains(where: { $0 != nil }) else {
+        let results = await (profile, subscriptions, progress, platformQuotas, usage, models)
+        guard [results.0, results.1, results.2, results.3, results.4, results.5].contains(where: { $0 != nil }) else {
             throw CodexToolsError.invalidResponse
         }
 
@@ -127,8 +128,9 @@ struct Sub2APIClient: Sendable {
             profile: results.0,
             subscriptionSummary: results.1,
             subscriptionProgress: results.2,
-            usageStats: results.3,
-            modelStats: results.4,
+            platformQuotas: results.3,
+            usageStats: results.4,
+            modelStats: results.5,
             usagePeriod: period
         )
     }
@@ -178,17 +180,9 @@ struct Sub2APIClient: Sendable {
         return (collected, true)
     }
 
-    /// 并行读取调用、兑换和充值记录，再合并为普通用户可见的最近余额活动。
+    /// 并行读取兑换和充值记录，只返回会增加账户余额的最近活动。
     func fetchBalanceActivities(token: String, limit: Int = 20) async throws -> [BalanceActivity] {
         let normalizedLimit = min(max(limit, 1), 100)
-        async let usage = optionalJSON(
-            path: "usage",
-            token: token,
-            query: [
-                "page": "1", "page_size": String(normalizedLimit),
-                "sort_by": "created_at", "sort_order": "desc"
-            ]
-        )
         async let redeem = optionalJSON(path: "redeem/history", token: token)
         async let payments = optionalJSON(
             path: "payment/orders/my",
@@ -198,15 +192,212 @@ struct Sub2APIClient: Sendable {
                 "status": "completed", "order_type": "balance"
             ]
         )
-        let responses = await (usage, redeem, payments)
-        guard [responses.0, responses.1, responses.2].contains(where: { $0 != nil }) else {
+        let responses = await (redeem, payments)
+        guard responses.0 != nil || responses.1 != nil else {
             throw CodexToolsError.invalidResponse
         }
         return BalanceActivityParser.parse(
-            usageResponse: responses.0,
-            redeemResponse: responses.1,
-            paymentResponse: responses.2,
+            redeemResponse: responses.0,
+            paymentResponse: responses.1,
             limit: normalizedLimit
+        )
+    }
+
+    /// 读取当前用户的 API 密钥列表，分页上限 100 足以覆盖桌面端的常规管理场景。
+    func fetchAPIKeys(token: String) async throws -> [UserAPIKey] {
+        let response: JSONValue = try await request(
+            path: "keys",
+            method: "GET",
+            token: token,
+            query: ["page": "1", "page_size": "100", "sort_by": "created_at", "sort_order": "desc"],
+            body: nil
+        )
+        return UserPortalParser.apiKeys(from: response)
+    }
+
+    /// 读取当前用户可使用的分组，创建密钥时使用真实分组 ID 而不是名称猜测。
+    func fetchAvailableGroups(token: String) async throws -> [AvailableUserGroup] {
+        let response: JSONValue = try await request(
+            path: "groups/available",
+            method: "GET",
+            token: token,
+            body: nil
+        )
+        return UserPortalParser.availableGroups(from: response)
+    }
+
+    /// 使用完整配置创建 API 密钥，限额、过期、IP 和周期限制与网页端字段保持一致。
+    func createAPIKey(token: String, configuration: APIKeyConfiguration) async throws -> UserAPIKey {
+        let response: JSONValue = try await request(
+            path: "keys",
+            method: "POST",
+            token: token,
+            body: try JSONEncoder().encode(configuration)
+        )
+        guard let key = UserPortalParser.apiKeys(from: .array([response])).first else {
+            throw CodexToolsError.invalidResponse
+        }
+        return key
+    }
+
+    /// 编辑现有 API 密钥；自定义密钥只能在创建时设置，因此更新请求会主动忽略该字段。
+    func updateAPIKey(token: String, id: Int, configuration: APIKeyConfiguration, status: String) async throws {
+        let body = APIKeyUpdatePayload(
+            name: configuration.name,
+            groupID: configuration.groupID,
+            status: status,
+            ipWhitelist: configuration.ipWhitelist,
+            ipBlacklist: configuration.ipBlacklist,
+            quota: configuration.quota,
+            rateLimit5Hours: configuration.rateLimit5Hours,
+            rateLimit1Day: configuration.rateLimit1Day,
+            rateLimit7Days: configuration.rateLimit7Days
+        )
+        let _: JSONValue = try await request(
+            path: "keys/\(id)",
+            method: "PUT",
+            token: token,
+            body: try JSONEncoder().encode(body)
+        )
+    }
+
+    /// 启用或停用 API 密钥，服务端仍保留密钥和历史用量。
+    func updateAPIKeyStatus(token: String, id: Int, status: String) async throws {
+        let _: JSONValue = try await request(
+            path: "keys/\(id)",
+            method: "PUT",
+            token: token,
+            body: try JSONEncoder().encode(["status": status])
+        )
+    }
+
+    /// 永久删除指定 API 密钥；调用方必须在界面层先显示二次确认。
+    func deleteAPIKey(token: String, id: Int) async throws {
+        let _: JSONValue = try await request(
+            path: "keys/\(id)",
+            method: "DELETE",
+            token: token,
+            body: nil
+        )
+    }
+
+    /// 按当前周期、筛选条件和页码读取使用记录，返回服务端总数供滚动加载历史数据。
+    func fetchUsageRecords(
+        token: String,
+        period: UsagePeriod,
+        timeZone: TimeZone,
+        page: Int,
+        pageSize: Int,
+        filters: PortalUsageFilters
+    ) async throws -> PortalUsagePage {
+        var query = period.dateQuery(timeZone: timeZone)
+        query["page"] = String(max(page, 1))
+        query["page_size"] = String(min(max(pageSize, 20), 200))
+        query["sort_by"] = "created_at"
+        query["sort_order"] = "desc"
+        if let value = filters.apiKeyID { query["api_key_id"] = String(value) }
+        if let value = filters.model, !value.isEmpty { query["model"] = value }
+        if let value = filters.groupID { query["group_id"] = String(value) }
+        if let value = filters.requestType, !value.isEmpty { query["request_type"] = value }
+        if let value = filters.billingType { query["billing_type"] = String(value) }
+        if let value = filters.billingMode, !value.isEmpty { query["billing_mode"] = value }
+        let response: JSONValue = try await request(
+            path: "usage",
+            method: "GET",
+            token: token,
+            query: query,
+            body: nil
+        )
+        return UserPortalParser.usagePage(from: response)
+    }
+
+    /// 读取单条使用记录的完整计费明细，列表字段不足时详情面板仍能展示完整数据。
+    func fetchUsageRecord(token: String, id: Int) async throws -> PortalUsageRecord {
+        let response: JSONValue = try await request(
+            path: "usage/\(id)",
+            method: "GET",
+            token: token,
+            body: nil
+        )
+        guard let record = UserPortalParser.usageRecords(from: .array([response])).first else {
+            throw CodexToolsError.invalidResponse
+        }
+        return record
+    }
+
+    /// 读取管理员允许普通用户查看的渠道健康状态，不请求管理员监控接口。
+    func fetchChannelMonitors(token: String) async throws -> [UserChannelMonitor] {
+        let response: JSONValue = try await request(
+            path: "channel-monitors",
+            method: "GET",
+            token: token,
+            body: nil
+        )
+        return UserPortalParser.channelMonitors(from: response)
+    }
+
+    /// 读取当前用户的全部订阅，包含已过期或暂停状态，便于核对历史计划。
+    func fetchSubscriptions(token: String) async throws -> [UserSubscriptionItem] {
+        async let subscriptions: JSONValue = request(
+            path: "subscriptions",
+            method: "GET",
+            token: token,
+            body: nil
+        )
+        async let progress = optionalJSON(path: "subscriptions/progress", token: token)
+        let values = try await (subscriptions, progress)
+        return UserPortalParser.subscriptions(from: values.0, progressResponse: values.1)
+    }
+
+    /// 读取个人资料摘要，供原生账户页面展示和编辑用户名。
+    func fetchUserProfile(token: String) async throws -> UserProfileSummary {
+        let response: JSONValue = try await request(
+            path: "user/profile",
+            method: "GET",
+            token: token,
+            body: nil
+        )
+        guard let profile = UserPortalParser.profile(from: response) else {
+            throw CodexToolsError.invalidResponse
+        }
+        return profile
+    }
+
+    /// 提交兑换码并解析余额、并发或订阅变化；兑换码不会写入本地日志。
+    func redeem(token: String, code: String) async throws -> RedeemResult {
+        let response: JSONValue = try await request(
+            path: "redeem",
+            method: "POST",
+            token: token,
+            body: try JSONEncoder().encode(["code": code])
+        )
+        return UserPortalParser.redeemResult(from: response)
+    }
+
+    /// 更新当前账户用户名，邮箱和认证绑定仍由 Sub2API 服务端负责校验。
+    func updateUsername(token: String, username: String) async throws -> UserProfileSummary {
+        let response: JSONValue = try await request(
+            path: "user",
+            method: "PUT",
+            token: token,
+            body: try JSONEncoder().encode(["username": username])
+        )
+        guard let profile = UserPortalParser.profile(from: response) else {
+            throw CodexToolsError.invalidResponse
+        }
+        return profile
+    }
+
+    /// 修改当前账户密码；密码仅存在于这次 HTTPS（加密网页传输协议）请求内。
+    func changePassword(token: String, oldPassword: String, newPassword: String) async throws {
+        let _: JSONValue = try await request(
+            path: "user/password",
+            method: "PUT",
+            token: token,
+            body: try JSONEncoder().encode([
+                "old_password": oldPassword,
+                "new_password": newPassword
+            ])
         )
     }
 
@@ -260,7 +451,7 @@ struct Sub2APIClient: Sendable {
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("CodexTools/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("SubPilot/0.2", forHTTPHeaderField: "User-Agent")
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -296,6 +487,31 @@ struct Sub2APIClient: Sendable {
     private static let decoder = JSONDecoder()
 }
 
+/// 表示密钥编辑请求；自定义密钥只能在创建时设置，因此这里不包含该敏感字段。
+private struct APIKeyUpdatePayload: Encodable {
+    let name: String
+    let groupID: Int?
+    let status: String
+    let ipWhitelist: [String]
+    let ipBlacklist: [String]
+    let quota: Double
+    let rateLimit5Hours: Double
+    let rateLimit1Day: Double
+    let rateLimit7Days: Double
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case groupID = "group_id"
+        case status
+        case ipWhitelist = "ip_whitelist"
+        case ipBlacklist = "ip_blacklist"
+        case quota
+        case rateLimit5Hours = "rate_limit_5h"
+        case rateLimit1Day = "rate_limit_1d"
+        case rateLimit7Days = "rate_limit_7d"
+    }
+}
+
 /// 负责读取 codex-resets.com 的公开只读重置状态。
 struct CodexResetsClient: Sendable {
     private let statusURL = URL(string: "https://codex-resets.com/api/v1/status")!
@@ -305,7 +521,7 @@ struct CodexResetsClient: Sendable {
         var request = URLRequest(url: statusURL)
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("CodexTools/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("SubPilot/0.2", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,

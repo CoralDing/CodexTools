@@ -1,12 +1,12 @@
 /**
- * 文件说明：账户余额最近入账、扣减和调用消费活动弹窗
+ * 文件说明：账户余额最近增加活动弹窗
  * 作者：dingyi60(Codex)
  * 创建时间：2026-08-26
  */
 
 import SwiftUI
 
-/// 展示当前余额和最近余额变动，不把逐条账单明细写入本地持久化存储。
+/// 展示当前余额和最近增加活动，不把逐条账户记录写入本地持久化存储。
 struct BalanceActivityView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -24,16 +24,16 @@ struct BalanceActivityView: View {
             activityContent
         }
         .frame(width: 430, height: 480)
-        .background(.ultraThinMaterial)
+        .background(SubPilotWindowBackdrop())
     }
 
     /// 标题栏提供数据范围、时区、手动刷新和关闭命令。
     private var header: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("余额最近活动")
+                Text("余额增加记录")
                     .font(.system(size: 16, weight: .semibold))
-                Text("最近 20 条余额变动 · \(selectedTimeZone.identifier)")
+                Text("最近 20 条余额增加 · \(selectedTimeZone.identifier)")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -47,7 +47,7 @@ struct BalanceActivityView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(ToolbarIconButtonStyle())
-            .help("刷新余额活动")
+            .help("刷新余额增加记录")
             .disabled(appState.isLoadingBalanceActivities)
 
             Button(action: dismiss.callAsFunction) {
@@ -60,7 +60,7 @@ struct BalanceActivityView: View {
         .frame(height: 62)
     }
 
-    /// 当前余额保持为弹窗首要信息，并用简短标签说明下面是余额变动流水。
+    /// 当前余额保持为弹窗首要信息，并明确下面只展示余额增加活动。
     private var balanceSummary: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
@@ -75,7 +75,7 @@ struct BalanceActivityView: View {
 
             Spacer()
 
-            Label("余额变动", systemImage: "arrow.up.arrow.down")
+            Label("余额增加", systemImage: "arrow.up.right")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppTheme.accent)
         }
@@ -88,12 +88,12 @@ struct BalanceActivityView: View {
     @ViewBuilder
     private var activityContent: some View {
         if appState.isLoadingBalanceActivities && appState.balanceActivities.isEmpty {
-            ProgressView("正在读取最近活动")
+            ProgressView("正在读取余额增加记录")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let message = appState.balanceActivityErrorMessage,
                   appState.balanceActivities.isEmpty {
             ContentUnavailableView {
-                Label("活动读取失败", systemImage: "exclamationmark.triangle")
+                Label("余额记录读取失败", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -104,9 +104,9 @@ struct BalanceActivityView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if appState.balanceActivities.isEmpty {
             ContentUnavailableView {
-                Label("暂无余额活动", systemImage: "clock")
+                Label("暂无余额增加记录", systemImage: "clock")
             } description: {
-                Text("Sub2API 暂未返回余额变动记录")
+                Text("Sub2API 暂未返回充值或加款记录")
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -134,14 +134,14 @@ struct BalanceActivityView: View {
         }
     }
 
-    /// 单条活动突出余额增减；调用记录额外展示 Token 和响应时间供核对。
+    /// 单条记录突出余额增加金额，并展示具体活动来源。
     private func activityRow(_ activity: BalanceActivity) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: activityIcon(activity))
+            Image(systemName: "arrow.up.right")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(activityColor(activity))
+                .foregroundStyle(AppTheme.accent)
                 .frame(width: 26, height: 26)
-                .background(activityColor(activity).opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+                .background(AppTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -154,7 +154,7 @@ struct BalanceActivityView: View {
                         .monospacedDigit()
                 }
 
-                Text(activityMetadata(activity))
+                Text(activity.detail)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -165,37 +165,15 @@ struct BalanceActivityView: View {
             VStack(alignment: .trailing, spacing: 3) {
                 Text(UsageFormatter.balanceChange(activity.amountChange))
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(activityColor(activity))
+                    .foregroundStyle(AppTheme.accent)
                     .monospacedDigit()
-                Text(activity.amountChange >= 0 ? "入账" : "扣减")
+                Text("入账")
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 61)
-    }
-
-    /// 将 Token 与可选响应时间压缩为单行，避免活动行随字段有无改变高度。
-    private func activityMetadata(_ activity: BalanceActivity) -> String {
-        var parts = [activity.detail]
-        if let totalTokens = activity.totalTokens {
-            parts.append("\(UsageFormatter.compactTokens(totalTokens)) Token")
-        }
-        if let duration = activity.durationMilliseconds {
-            parts.append(UsageFormatter.duration(milliseconds: duration))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// 入账使用向上箭头，所有扣减使用向下箭头，避免只依赖颜色传达含义。
-    private func activityIcon(_ activity: BalanceActivity) -> String {
-        activity.amountChange >= 0 ? "arrow.up.right" : "arrow.down.right"
-    }
-
-    /// 入账沿用品牌青绿色，扣减沿用警示橙色，保持与余额状态的现有语义一致。
-    private func activityColor(_ activity: BalanceActivity) -> Color {
-        activity.amountChange >= 0 ? AppTheme.accent : AppTheme.warning
     }
 
     /// 使用用户选择的时区显示月日和分钟，保证与重置时间口径一致。

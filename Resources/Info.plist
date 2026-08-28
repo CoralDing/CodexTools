@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-文件说明：CodexTools macOS 应用包元数据与菜单栏运行配置
+文件说明：SubPilot macOS 应用包元数据与菜单栏运行配置
 作者：dingyi60(Codex)
 创建时间：2026-08-25
 -->
@@ -10,7 +10,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
     <key>CFBundleDisplayName</key>
-    <string>CodexTools</string>
+    <string>SubPilot</string>
     <key>CFBundleExecutable</key>
     <string>CodexTools</string>
     <key>CFBundleIconFile</key>
@@ -20,13 +20,13 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>CodexTools</string>
+    <string>SubPilot</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.1</string>
+    <string>0.2.0</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>3</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
