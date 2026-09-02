@@ -1104,12 +1104,13 @@ enum PreferenceKey {
     static let menuBarShowsCost = "menuBarShowsCost"
     static let consumptionAnalysisEnabled = "consumptionAnalysisEnabled"
     static let communityResetNotificationsEnabled = "communityResetNotificationsEnabled"
+    static let launchAtLoginEnabled = "launchAtLoginEnabled"
     static let lastObservedCommunityResetAt = "lastObservedCommunityResetAt"
     static let consumptionAnalysisSnapshot = "consumptionAnalysisSnapshot"
 
     /// 首次启动时写入合理默认值，后续不覆盖用户已经调整过的设置。
-    static func registerDefaults() {
-        UserDefaults.standard.register(defaults: [
+    static func registerDefaults(in defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [
             notificationsEnabled: false,
             balanceThreshold: 20.0,
             quotaThreshold: 15.0,
@@ -1119,7 +1120,8 @@ enum PreferenceKey {
             menuBarShowsTokens: true,
             menuBarShowsCost: true,
             consumptionAnalysisEnabled: true,
-            communityResetNotificationsEnabled: true
+            communityResetNotificationsEnabled: true,
+            launchAtLoginEnabled: true
         ])
     }
 }

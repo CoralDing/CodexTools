@@ -16,6 +16,8 @@ struct CodexToolsApp: App {
     /// 注册默认偏好后创建状态对象，确保轮询任务读取到有效间隔。
     init() {
         PreferenceKey.registerDefaults()
+        // 首次安装默认注册系统登录项，之后始终尊重设置页中保存的用户选择。
+        LaunchAtLoginService.synchronizePreferredState()
         let environment = ProcessInfo.processInfo.environment
         let isQualityCheck = environment["CODEXTOOLS_QA_WINDOW"] == "1"
             || environment["CODEXTOOLS_QA_RENDER_DIR"] != nil

@@ -1,5 +1,5 @@
 /**
- * 文件说明：菜单栏摘要、通知阈值、刷新频率与时间显示设置
+ * 文件说明：启动方式、菜单栏摘要、通知阈值、刷新频率与时间显示设置
  * 作者：dingyi60(Codex)
  * 创建时间：2026-08-25
  */
@@ -20,6 +20,9 @@ struct SettingsView: View {
     @AppStorage(PreferenceKey.menuBarShowsCost) private var menuBarShowsCost = true
     @AppStorage(PreferenceKey.consumptionAnalysisEnabled) private var consumptionAnalysisEnabled = true
     @AppStorage(PreferenceKey.communityResetNotificationsEnabled) private var communityResetNotificationsEnabled = true
+    @AppStorage(PreferenceKey.launchAtLoginEnabled) private var launchAtLoginEnabled = true
+    @State private var launchAtLoginStatus = LaunchAtLoginService.status
+    @State private var launchAtLoginErrorMessage: String?
 
     /// 使用开放式分组和紧凑设置行，保持原生控件能力但减少默认表单的厚重感。
     var body: some View {
@@ -29,6 +32,7 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    settingsSection("通用") { generalSettings }
                     settingsSection("菜单栏") { menuBarSettings }
                     settingsSection("分析") { consumptionAnalysisSettings }
                     settingsSection("提醒") { notificationSettings }
@@ -42,6 +46,35 @@ struct SettingsView: View {
         }
         .frame(width: 460, height: 650)
         .background(SubPilotWindowBackdrop(showsSidebarTint: false))
+        .onAppear {
+            // 每次打开设置页都读取系统真实状态，兼容用户在系统设置中修改登录项权限。
+            launchAtLoginStatus = LaunchAtLoginService.status
+        }
+    }
+
+    /// 通用设置管理应用生命周期相关行为，开关变化后立即同步系统登录项。
+    private var generalSettings: some View {
+        VStack(spacing: 0) {
+            settingRow(
+                icon: "power",
+                title: "开机时启动",
+                subtitle: launchAtLoginSubtitle
+            ) {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { launchAtLoginEnabled },
+                        set: { enabled in
+                            updateLaunchAtLogin(enabled)
+                        }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(AppTheme.accent)
+            }
+        }
+        .modifier(SettingsGroupStyle())
     }
 
     /// 消耗分析使用独立开关；关闭后立即停止后台任务，且不会连带关闭设置窗口。
@@ -267,6 +300,34 @@ struct SettingsView: View {
             settingsWindow.performClose(nil)
         } else {
             dismiss()
+        }
+    }
+
+    /// 应用开关选择并保留失败前的偏好，防止界面显示与系统真实状态不一致。
+    private func updateLaunchAtLogin(_ enabled: Bool) {
+        do {
+            launchAtLoginStatus = try LaunchAtLoginService.setEnabled(enabled)
+            launchAtLoginEnabled = enabled
+            launchAtLoginErrorMessage = nil
+        } catch {
+            launchAtLoginStatus = LaunchAtLoginService.status
+            launchAtLoginErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// 根据系统状态提供简短说明，让需要额外授权和不可用场景有明确处理方向。
+    private var launchAtLoginSubtitle: String {
+        if let launchAtLoginErrorMessage {
+            return launchAtLoginErrorMessage
+        }
+
+        switch launchAtLoginStatus {
+        case .enabled, .disabled:
+            return "登录 macOS 后在菜单栏自动运行"
+        case .requiresApproval:
+            return "请在“系统设置 → 通用 → 登录项”中允许"
+        case .unavailable:
+            return "安装到 Applications（应用程序）后可用"
         }
     }
 

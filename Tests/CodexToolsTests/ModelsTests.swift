@@ -11,6 +11,20 @@ import XCTest
 
 /// 验证不同数据源被整理成稳定界面模型时不会发生金额或时间语义错误。
 final class ModelsTests: XCTestCase {
+    /// 验证新安装默认开启登录自启动，同时仅注册默认值而不覆盖后续用户选择。
+    func testPreferencesEnableLaunchAtLoginByDefaultWithoutOverridingUserChoice() throws {
+        let suiteName = "CodexToolsTests.LaunchAtLogin.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        PreferenceKey.registerDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.launchAtLoginEnabled))
+
+        defaults.set(false, forKey: PreferenceKey.launchAtLoginEnabled)
+        PreferenceKey.registerDefaults(in: defaults)
+        XCTAssertFalse(defaults.bool(forKey: PreferenceKey.launchAtLoginEnabled))
+    }
+
     /// 验证嵌套接口字段可以被解析，并正确计算剩余额度与百分比。
     func testDashboardParserCalculatesRemainingQuota() {
         let profile: JSONValue = .object([
