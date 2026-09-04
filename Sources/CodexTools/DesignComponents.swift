@@ -43,16 +43,26 @@ struct AppMetricRail: View {
         .panelSurface(padding: 0)
     }
 
-    /// 单格把标题、主值和口径说明分成三级，最小字号保持在 11pt 以上。
+    /// 单格把图标、标题、主值和口径说明分成三级，最小字号保持在 11pt 以上。
     private func metricCell(_ item: AppMetricItem) -> some View {
         VStack(alignment: .leading, spacing: compact ? 5 : 7) {
-            Label(item.title, systemImage: item.icon)
-                .font(AppTheme.captionFont)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            HStack(spacing: 7) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        AppTheme.accent.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    )
+                Text(item.title)
+                    .font(AppTheme.captionFont.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Text(item.value)
-                .font(compact ? .system(size: 17, weight: .semibold, design: .rounded) : AppTheme.metricFont)
+                .font(compact ? .system(size: 18, weight: .semibold, design: .rounded) : .system(size: 21, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -60,12 +70,12 @@ struct AppMetricRail: View {
             if let detail = item.detail {
                 Text(detail)
                     .font(AppTheme.captionFont)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
         .padding(.horizontal, compact ? 12 : 14)
-        .frame(maxWidth: .infinity, minHeight: compact ? 70 : 84, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: compact ? 76 : 92, alignment: .leading)
     }
 }
 
@@ -89,6 +99,12 @@ struct AppSectionHeader: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 40)
+        .background(AppTheme.tableHeader)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(height: 0.5)
+        }
     }
 }
 

@@ -152,6 +152,26 @@ struct UserSubscriptionItem: Sendable, Equatable, Identifiable {
     let dailyResetInSeconds: Double?
     let weeklyResetInSeconds: Double?
     let monthlyResetInSeconds: Double?
+
+    /// 日额度只在服务端上限为正数时有效，空值和零值都表示没有配置。
+    var configuredDailyLimit: Double? {
+        dailyLimit.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// 周额度只在服务端上限为正数时有效，避免把孤立的用量字段误认为额度。
+    var configuredWeeklyLimit: Double? {
+        weeklyLimit.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// 月额度只在服务端上限为正数时有效，界面据此完全隐藏未配置周期。
+    var configuredMonthlyLimit: Double? {
+        monthlyLimit.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// 用于空状态判断；至少一个周期有正数上限才表示该订阅配置了周期额度。
+    var hasConfiguredQuota: Bool {
+        configuredDailyLimit != nil || configuredWeeklyLimit != nil || configuredMonthlyLimit != nil
+    }
 }
 
 /// 表示个人资料页需要的账户信息，敏感密码从不进入该模型。

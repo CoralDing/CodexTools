@@ -154,10 +154,13 @@ struct DashboardView: View {
                     .environmentObject(appState)
             }
 
-            Divider()
+            // 没有正数额度上限时完全隐藏额度区域，余额面板不会留下无意义的分隔线。
+            if snapshot.hasQuotaSummary {
+                Divider()
 
-            dashboardQuotaSummary(snapshot)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                dashboardQuotaSummary(snapshot)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(14)
         .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
@@ -169,15 +172,17 @@ struct DashboardView: View {
             Text("\(snapshot.primaryPlatformQuota?.displayName ?? "订阅") 平台额度")
                 .font(AppTheme.bodyEmphasizedFont)
 
-            if let quota = snapshot.primaryPlatformQuota,
-               quota.weekly != nil || quota.monthly != nil {
+            if let quota = snapshot.primaryPlatformQuota {
+                if let daily = quota.daily {
+                    dashboardQuotaRow("日", daily)
+                }
                 if let weekly = quota.weekly {
                     dashboardQuotaRow("周", weekly)
                 }
                 if let monthly = quota.monthly {
                     dashboardQuotaRow("月（近 30 天）", monthly)
                 }
-            } else {
+            } else if snapshot.hasLegacyQuota {
                 HStack {
                     Text("已用 \(currency(snapshot.quotaUsed))")
                     Spacer()

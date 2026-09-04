@@ -92,7 +92,7 @@ private struct LegacyAPIKeysPortalView: View {
                 Text("状态").frame(width: 74, alignment: .leading)
                 Text("操作").frame(width: 112, alignment: .trailing)
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(AppTheme.captionFont.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .frame(height: 36)
@@ -114,7 +114,7 @@ private struct LegacyAPIKeysPortalView: View {
                 Text(key.name)
                     .font(.system(size: 12, weight: .medium))
                 Text(maskedKey(key.key))
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -309,7 +309,7 @@ private struct LegacyUsageRecordsPortalView: View {
                 Text("倍率").frame(width: 54, alignment: .trailing)
                 Text("响应").frame(width: 72, alignment: .trailing)
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(AppTheme.captionFont.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .frame(height: 36)
@@ -322,7 +322,7 @@ private struct LegacyUsageRecordsPortalView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(record.model).fontWeight(.medium)
                         Text(record.groupName ?? record.endpoint ?? "—")
-                            .font(.system(size: 9))
+                            .font(AppTheme.captionFont)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -564,30 +564,33 @@ struct APIKeysPortalView: View {
                 Text(key.rateLimit5Hours > 0 ? "5h \(UsageFormatter.cost(key.rateLimit5Hours))" : "未设置")
                 if key.rateLimit1Day > 0 { Text("1d \(UsageFormatter.cost(key.rateLimit1Day))") }
             }
-            .font(.system(size: 10))
+            .font(AppTheme.captionFont)
             .foregroundStyle(.secondary)
             .frame(width: 110, alignment: .leading)
             Text(key.lastUsedAt.map(relativeDate) ?? "从未")
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .frame(width: 92, alignment: .leading)
             Label(statusTitle(key.status), systemImage: "circle.fill")
                 .font(AppTheme.captionFont.weight(.medium))
                 .foregroundStyle(statusColor(key.status))
                 .frame(width: 66, alignment: .leading)
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Button { keyForUsage = key } label: {
                     Image(systemName: "arrow.down.to.line.compact")
                 }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .help("使用方式与导入客户端")
-                Button { copyKey(key.key) } label: { Image(systemName: "doc.on.doc") }.help("复制 API 密钥")
-                Button { beginEdit(key) } label: { Image(systemName: "pencil") }.help("编辑密钥")
-                Button(role: .destructive) { keyPendingDeletion = key } label: { Image(systemName: "trash") }.help("删除密钥")
+                .buttonStyle(TableIconButtonStyle(tint: AppTheme.accent))
+                .help("使用方式与导入客户端")
+                Button { copyKey(key.key) } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(TableIconButtonStyle())
+                    .help("复制 API 密钥")
+                Button { beginEdit(key) } label: { Image(systemName: "pencil") }
+                    .buttonStyle(TableIconButtonStyle())
+                    .help("编辑密钥")
+                Button(role: .destructive) { keyPendingDeletion = key } label: { Image(systemName: "trash") }
+                    .buttonStyle(TableIconButtonStyle(tint: AppTheme.danger))
+                    .help("删除密钥")
             }
-            .buttonStyle(.borderless)
             .frame(width: 118, alignment: .trailing)
         }
         .font(AppTheme.bodyFont)
@@ -664,7 +667,7 @@ struct APIKeysPortalView: View {
             Divider()
             HStack {
                 Text("创建后请立即复制并妥善保存完整密钥")
-                    .font(.system(size: 10))
+                    .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("取消") { showsEditor = false }.keyboardShortcut(.cancelAction)
@@ -688,7 +691,7 @@ struct APIKeysPortalView: View {
     /// 数字字段统一使用上标签下输入框布局，三项周期限制可以快速横向比较。
     private func editorTextField(_ title: String, placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(title).font(AppTheme.captionFont).foregroundStyle(.secondary)
             TextField(placeholder, text: text).textFieldStyle(.roundedBorder)
         }
         .frame(maxWidth: .infinity)
@@ -697,12 +700,12 @@ struct APIKeysPortalView: View {
     /// IP 列表使用等高多行输入区，支持直接粘贴网页端原有规则。
     private func editorMultilineField(_ title: String, placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(title).font(AppTheme.captionFont).foregroundStyle(.secondary)
             TextEditor(text: text)
                 .font(.system(size: 11, design: .monospaced))
                 .frame(height: 72)
                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(AppTheme.border) }
-            Text(placeholder).font(.system(size: 9)).foregroundStyle(.tertiary)
+            Text(placeholder).font(AppTheme.captionFont).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -1286,7 +1289,7 @@ struct UsageRecordsPortalView: View {
                 Text("模型分布").font(.system(size: 12, weight: .semibold))
                 Chart(displayedDerivedData.modelSummaries) { item in
                     BarMark(x: .value("Token", item.tokens), y: .value("模型", item.model))
-                        .foregroundStyle(AppTheme.accent)
+                        .foregroundStyle(usageModelColor(item.model))
                         .cornerRadius(2)
                 }
                 .chartXAxis(.hidden)
@@ -1297,6 +1300,12 @@ struct UsageRecordsPortalView: View {
         }
         .frame(height: 132)
         .panelSurface(padding: 0)
+    }
+
+    /// 模型分布使用离散系统色板，相邻模型无需只靠标签文字区分。
+    private func usageModelColor(_ model: String) -> Color {
+        let index = displayedDerivedData.modelSummaries.firstIndex { $0.model == model } ?? 0
+        return AppTheme.chartPalette[index % AppTheme.chartPalette.count]
     }
 
     /// 表格拥有独立滚动视口和固定表头，惰性容器只创建屏幕附近的行以控制长列表开销。
@@ -1699,35 +1708,69 @@ struct ChannelStatusPortalView: View {
                 .frame(maxWidth: .infinity, minHeight: 360)
                 .panelSurface()
             } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(appState.channelMonitors) { monitor in
-                        HStack(spacing: 14) {
-                            Circle()
-                                .fill(statusColor(monitor.status))
-                                .frame(width: 9, height: 9)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(monitor.name).font(.system(size: 13, weight: .medium))
-                                Text("\(monitor.groupName) · \(monitor.model)")
-                                    .font(AppTheme.captionFont)
-                                    .foregroundStyle(.secondary)
+                VStack(spacing: 12) {
+                    channelSummaryRail
+
+                    VStack(spacing: 0) {
+                        AppSectionHeader(title: "渠道明细", trailing: "共 \(appState.channelMonitors.count) 个")
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(appState.channelMonitors.enumerated()), id: \.element.id) { index, monitor in
+                                HStack(spacing: 14) {
+                                    Image(systemName: "antenna.radiowaves.left.and.right")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(statusColor(monitor.status))
+                                        .frame(width: 30, height: 30)
+                                        .background(
+                                            statusColor(monitor.status).opacity(0.10),
+                                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        )
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(monitor.name).font(.system(size: 13, weight: .medium))
+                                        Text("\(monitor.groupName) · \(monitor.model)")
+                                            .font(AppTheme.captionFont)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    metric("7 天可用率", monitor.availability7Days.formatted(.number.precision(.fractionLength(2))) + "%")
+                                    metric("响应延迟", UsageFormatter.duration(milliseconds: monitor.latencyMilliseconds))
+                                    AppStatusLabel(title: statusTitle(monitor.status), color: statusColor(monitor.status))
+                                        .frame(width: 64, alignment: .trailing)
+                                }
+                                .padding(.horizontal, 16)
+                                .frame(minHeight: 72)
+                                if index < appState.channelMonitors.count - 1 {
+                                    Divider().padding(.leading, 60)
+                                }
                             }
-                            Spacer()
-                            metric("7 天可用率", monitor.availability7Days.formatted(.number.precision(.fractionLength(2))) + "%")
-                            metric("响应延迟", UsageFormatter.duration(milliseconds: monitor.latencyMilliseconds))
-                            Text(statusTitle(monitor.status))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(statusColor(monitor.status))
-                                .frame(width: 64, alignment: .trailing)
                         }
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 68)
-                        Divider().padding(.leading, 38)
                     }
+                    .panelSurface(padding: 0)
                 }
-                .panelSurface(padding: 0)
             }
         }
         .task { await appState.loadChannelMonitors() }
+    }
+
+    /// 汇总只基于当前接口返回的监控项，空集合由上层空状态处理，不生成虚构的零值。
+    private var channelSummaryRail: some View {
+        let monitors = appState.channelMonitors
+        let healthyCount = monitors.filter { statusTitle($0.status) == "正常" }.count
+        let averageAvailability = monitors.reduce(0) { $0 + $1.availability7Days } / Double(monitors.count)
+        let latencyValues = monitors.compactMap(\.latencyMilliseconds)
+        let averageLatency = latencyValues.isEmpty
+            ? nil
+            : latencyValues.reduce(0, +) / Double(latencyValues.count)
+        let modelCount = Set(monitors.map(\.model)).count
+
+        return AppMetricRail(
+            items: [
+                AppMetricItem(icon: "checkmark.circle", title: "正常渠道", value: "\(healthyCount) / \(monitors.count)"),
+                AppMetricItem(icon: "chart.line.uptrend.xyaxis", title: "平均可用率", value: averageAvailability.formatted(.number.precision(.fractionLength(2))) + "%"),
+                AppMetricItem(icon: "timer", title: "平均延迟", value: UsageFormatter.duration(milliseconds: averageLatency)),
+                AppMetricItem(icon: "cpu", title: "覆盖模型", value: modelCount.formatted())
+            ],
+            compact: true
+        )
     }
 
     /// 指标使用上标签下数值，渠道名称变化不会挤压数值列。
@@ -1760,7 +1803,16 @@ struct ChannelStatusPortalView: View {
     }
 }
 
-/// 我的订阅页，展示订阅状态和日、周、月实际用量。
+/// 描述订阅页中一个经过有效性过滤的额度周期，避免视图直接拼装可选值。
+private struct SubscriptionQuotaPresentation: Identifiable {
+    let id: String
+    let title: String
+    let used: Double
+    let limit: Double
+    let resetInSeconds: Double?
+}
+
+/// 我的订阅页，只展示服务端明确配置了正数上限的日、周、月额度。
 struct SubscriptionsPortalView: View {
     @EnvironmentObject private var appState: AppState
 
@@ -1793,27 +1845,26 @@ struct SubscriptionsPortalView: View {
                                     .foregroundStyle(subscription.status == "active" ? AppTheme.success : .secondary)
                             }
 
-                            HStack(alignment: .top, spacing: 0) {
-                                usageMetric(
-                                    "今日额度",
-                                    used: subscription.dailyUsage,
-                                    limit: subscription.dailyLimit,
-                                    resetInSeconds: subscription.dailyResetInSeconds
-                                )
-                                Divider().frame(height: 76)
-                                usageMetric(
-                                    "本周额度",
-                                    used: subscription.weeklyUsage,
-                                    limit: subscription.weeklyLimit,
-                                    resetInSeconds: subscription.weeklyResetInSeconds
-                                )
-                                Divider().frame(height: 76)
-                                usageMetric(
-                                    "近 30 天额度",
-                                    used: subscription.monthlyUsage,
-                                    limit: subscription.monthlyLimit,
-                                    resetInSeconds: subscription.monthlyResetInSeconds
-                                )
+                            let periods = quotaPeriods(for: subscription)
+                            if periods.isEmpty {
+                                Label("该订阅未配置周期额度", systemImage: "gauge.with.dots.needle.0percent")
+                                    .font(AppTheme.bodyFont)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+                            } else {
+                                HStack(alignment: .top, spacing: 0) {
+                                    ForEach(Array(periods.enumerated()), id: \.element.id) { index, period in
+                                        usageMetric(
+                                            period.title,
+                                            used: period.used,
+                                            limit: period.limit,
+                                            resetInSeconds: period.resetInSeconds
+                                        )
+                                        if index < periods.count - 1 {
+                                            Divider().frame(height: 76)
+                                        }
+                                    }
+                                }
                             }
                         }
                         .panelSurface()
@@ -1824,27 +1875,60 @@ struct SubscriptionsPortalView: View {
         .task { await appState.loadSubscriptions() }
     }
 
-    /// 三个周期同时显示已用、上限、百分比和重置倒计时，口径来自订阅进度接口。
+    /// 按日、周、月顺序组装服务端明确配置的额度；零值和空值周期不会进入界面。
+    private func quotaPeriods(for subscription: UserSubscriptionItem) -> [SubscriptionQuotaPresentation] {
+        var periods: [SubscriptionQuotaPresentation] = []
+        if let limit = subscription.configuredDailyLimit {
+            periods.append(SubscriptionQuotaPresentation(
+                id: "daily",
+                title: "今日额度",
+                used: subscription.dailyUsage,
+                limit: limit,
+                resetInSeconds: subscription.dailyResetInSeconds
+            ))
+        }
+        if let limit = subscription.configuredWeeklyLimit {
+            periods.append(SubscriptionQuotaPresentation(
+                id: "weekly",
+                title: "本周额度",
+                used: subscription.weeklyUsage,
+                limit: limit,
+                resetInSeconds: subscription.weeklyResetInSeconds
+            ))
+        }
+        if let limit = subscription.configuredMonthlyLimit {
+            periods.append(SubscriptionQuotaPresentation(
+                id: "monthly",
+                title: "近 30 天额度",
+                used: subscription.monthlyUsage,
+                limit: limit,
+                resetInSeconds: subscription.monthlyResetInSeconds
+            ))
+        }
+        return periods
+    }
+
+    /// 单个有效周期显示已用、上限、百分比和重置倒计时，口径来自订阅进度接口。
     private func usageMetric(
         _ title: String,
         used: Double,
-        limit: Double?,
+        limit: Double,
         resetInSeconds: Double?
     ) -> some View {
-        let progress = limit.flatMap { $0 > 0 ? min(max(used / $0, 0), 1) : nil }
+        let progress = min(max(used / limit, 0), 1)
         return VStack(alignment: .leading, spacing: 5) {
             Text(title).font(AppTheme.captionFont).foregroundStyle(.secondary)
             HStack {
-                Text(limit.map { "\(UsageFormatter.cost(used)) / \(UsageFormatter.cost($0))" } ?? UsageFormatter.cost(used))
+                Text("\(UsageFormatter.cost(used)) / \(UsageFormatter.cost(limit))")
                 Spacer()
-                Text(progress.map { $0.formatted(.percent.precision(.fractionLength(0))) } ?? "未限制")
+                Text(progress.formatted(.percent.precision(.fractionLength(0))))
                     .font(AppTheme.captionFont)
                     .foregroundStyle(.secondary)
             }
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .monospacedDigit()
-            ProgressView(value: progress ?? 0)
-                .tint((progress ?? 0) >= 0.9 ? AppTheme.warning : AppTheme.accent)
+            ProgressView(value: progress)
+                .tint(progress >= 0.9 ? AppTheme.warning : AppTheme.accent)
             Text(resetDescription(resetInSeconds))
                 .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)

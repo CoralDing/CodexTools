@@ -188,11 +188,21 @@ struct MainWindowView: View {
                 Button {
                     openSettingsWindow()
                 } label: {
-                    Label("设置", systemImage: "gearshape")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 10) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 26, height: 26)
+                        Text("设置")
+                            .font(.system(size: 14, weight: .medium))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 38)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 14, weight: .medium))
+                .help("打开应用设置")
 
                 Divider()
 
@@ -209,6 +219,8 @@ struct MainWindowView: View {
                     }
                     Spacer()
                 }
+                .padding(10)
+                .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .padding(14)
         }
@@ -224,14 +236,19 @@ struct MainWindowView: View {
             HStack(spacing: 10) {
                 Image(systemName: section.systemImage)
                     .font(.system(size: 15, weight: .medium))
-                    .frame(width: 20)
+                    .foregroundStyle(selection == section ? AppTheme.accent : Color.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(
+                        selection == section ? AppTheme.accent.opacity(0.10) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    )
                 Text(section.title)
                     .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.primary)
                 Spacer()
             }
-            .foregroundStyle(selection == section ? AppTheme.accent : Color.primary)
-            .padding(.horizontal, 12)
-            .frame(height: 38)
+            .padding(.horizontal, 9)
+            .frame(height: 40)
             .background(
                 selection == section ? AppTheme.selectedSurface : Color.clear,
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -240,6 +257,13 @@ struct MainWindowView: View {
                 // 选中态的细高光边界让它像嵌在侧栏玻璃中的控制面，而不是简单色块。
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .stroke(selection == section ? Color.white.opacity(0.08) : Color.clear, lineWidth: 0.75)
+            }
+            .overlay(alignment: .leading) {
+                // 左侧短指示条建立稳定焦点，弱化大面积选中色块带来的笨重感。
+                Capsule()
+                    .fill(selection == section ? AppTheme.accent : Color.clear)
+                    .frame(width: 3, height: 20)
+                    .padding(.leading, 1)
             }
         }
         .buttonStyle(.plain)
@@ -526,10 +550,13 @@ struct MainWindowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Divider().frame(height: 92)
+            // 未配置任何平台或旧版总额度时，不保留空白额度区域和悬空分隔线。
+            if snapshot.hasQuotaSummary {
+                Divider().frame(height: 92)
 
-            platformQuotaSummary(snapshot)
-            .frame(maxWidth: .infinity, alignment: .leading)
+                platformQuotaSummary(snapshot)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .panelSurface(padding: 20)
     }
@@ -544,8 +571,13 @@ struct MainWindowView: View {
                 AppStatusLabel(title: "已连接", color: AppTheme.success)
             }
 
-            if let quota = snapshot.primaryPlatformQuota,
-               quota.weekly != nil || quota.monthly != nil {
+            if let quota = snapshot.primaryPlatformQuota {
+                if let daily = quota.daily {
+                    platformQuotaRow(title: "日额度", window: daily)
+                }
+                if quota.daily != nil, quota.weekly != nil || quota.monthly != nil {
+                    Divider()
+                }
                 if let weekly = quota.weekly {
                     platformQuotaRow(title: "周额度", window: weekly)
                 }
@@ -555,7 +587,7 @@ struct MainWindowView: View {
                 if let monthly = quota.monthly {
                     platformQuotaRow(title: "月（近 30 天）", window: monthly)
                 }
-            } else {
+            } else if snapshot.hasLegacyQuota {
                 legacyQuotaRow(snapshot)
             }
         }
@@ -685,8 +717,8 @@ struct MainWindowView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             Text(detail)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .font(AppTheme.captionFont)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
         .padding(14)
@@ -731,11 +763,11 @@ struct MainWindowView: View {
             .padding(.horizontal, 14)
             .frame(height: 32)
             .background(AppTheme.tableHeader)
-            ForEach(platformSummaries.prefix(4)) { item in
+            ForEach(Array(platformSummaries.prefix(4).enumerated()), id: \.element.id) { index, item in
                 HStack(spacing: 8) {
                     HStack(spacing: 7) {
                         Circle()
-                            .fill(AppTheme.accent)
+                            .fill(chartColor(at: index))
                             .frame(width: 7, height: 7)
                         Text(item.platform)
                     }
@@ -776,7 +808,7 @@ struct MainWindowView: View {
                         x: .value("Token", item.tokens),
                         y: .value("模型", item.model)
                     )
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(modelChartColor(item.model))
                     .cornerRadius(2)
                     .annotation(position: .trailing) {
                         Text(UsageFormatter.compactTokens(item.tokens))
@@ -792,6 +824,17 @@ struct MainWindowView: View {
             }
         }
         .panelSurface(padding: 0)
+    }
+
+    /// 使用固定系统色板映射模型，排序稳定时同一模型在当前图表中保持一致颜色。
+    private func modelChartColor(_ model: String) -> Color {
+        let index = overviewModelSummaries.firstIndex { $0.model == model } ?? 0
+        return chartColor(at: index)
+    }
+
+    /// 对任意数量的数据项循环使用离散色板，避免数组越界并保持品牌色为第一序列。
+    private func chartColor(at index: Int) -> Color {
+        AppTheme.chartPalette[index % AppTheme.chartPalette.count]
     }
 
     /// Token 趋势使用最近真实调用点，面积只用于帮助识别峰值而不改变数据含义。
@@ -834,15 +877,15 @@ struct MainWindowView: View {
             ForEach(appState.portalUsageRecords.prefix(5)) { record in
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(record.model).font(.system(size: 10, weight: .medium)).lineLimit(1)
-                        Text(formattedTime(record.createdAt)).font(.system(size: 8)).foregroundStyle(.secondary)
+                        Text(record.model).font(AppTheme.captionFont.weight(.medium)).lineLimit(1)
+                        Text(formattedTime(record.createdAt)).font(AppTheme.captionFont).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Text(UsageFormatter.compactTokens(record.totalTokens)).frame(width: 52, alignment: .trailing)
                     Text(UsageFormatter.cost(record.actualCost)).frame(width: 62, alignment: .trailing)
                     Text(UsageFormatter.duration(milliseconds: record.durationMilliseconds)).frame(width: 58, alignment: .trailing)
                 }
-                .font(.system(size: 9))
+                .font(AppTheme.captionFont)
                 .monospacedDigit()
                 .padding(.horizontal, 12)
                 .frame(height: 34)
@@ -972,7 +1015,7 @@ struct MainWindowView: View {
     private func analysisMetric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -994,7 +1037,7 @@ struct MainWindowView: View {
 
             Spacer(minLength: 12)
             Text(timeZoneDescription)
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -1006,7 +1049,7 @@ struct MainWindowView: View {
     private func compactResetRow(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(size: 13, weight: .medium))
@@ -1069,7 +1112,7 @@ struct MainWindowView: View {
             }
 
             Text("分析窗口 \(formattedDateTime(analysis.windowStart)) – \(formattedDateTime(analysis.windowEnd)) · \(timeZoneDescription)")
-                .font(.system(size: 10))
+                .font(AppTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -1113,7 +1156,7 @@ struct MainWindowView: View {
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 12, weight: .medium))
-                Text(detail).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(detail).font(AppTheme.captionFont).foregroundStyle(.secondary)
             }
             Spacer()
             Text(value)

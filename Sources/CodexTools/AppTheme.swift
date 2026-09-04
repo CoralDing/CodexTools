@@ -16,6 +16,15 @@ enum AppTheme {
     static let warning = Color(nsColor: .systemOrange)
     static let danger = Color(nsColor: .systemRed)
 
+    // 离散图表使用系统语义色区分模型和平台，避免所有数据都挤在同一种青绿色里。
+    static let chartPalette: [Color] = [
+        accent,
+        Color(nsColor: .systemBlue),
+        Color(nsColor: .systemOrange),
+        Color(nsColor: .systemIndigo),
+        Color(nsColor: .systemPink)
+    ]
+
     // 使用 AppKit 语义色跟随 macOS 外观。此前固定的深石墨背景遇到浅色系统文字时，会产生黑底黑字。
     static let canvas = Color(nsColor: .windowBackgroundColor)
     static let contentCanvas = Color(nsColor: .controlBackgroundColor)
@@ -139,7 +148,7 @@ struct SubPilotBrandIcon: View {
     }
 }
 
-/// 为主要数据区域提供单层自适应表面，使用细边框而不是多层阴影维持清晰分组。
+/// 为主要数据区域提供单层自适应表面，以细边框和静态微阴影维持清晰分组。
 struct PanelSurfaceModifier: ViewModifier {
     let padding: CGFloat
 
@@ -152,7 +161,14 @@ struct PanelSurfaceModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
                     .stroke(AppTheme.border, lineWidth: 0.75)
             }
-            // 普通数据面板不使用逐层阴影，滚动时只需合成背景和细边框；真正浮层仍保留阴影。
+            .overlay(alignment: .top) {
+                // 顶边高光模拟原生控制面的受光关系，静态描边不会触发滚动中的实时模糊。
+                RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                    .trim(from: 0.04, to: 0.46)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 0.65)
+                    .padding(0.5)
+            }
+            .shadow(color: Color.black.opacity(0.035), radius: 7, y: 2)
     }
 }
 
@@ -347,6 +363,26 @@ struct ToolbarIconButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
                     .stroke(AppTheme.border, lineWidth: 1)
             }
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// 表格中的图标命令使用稳定点击区域，颜色仅用于强调导入和删除等不同语义。
+struct TableIconButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    var tint: Color = .secondary
+
+    /// 固定按钮尺寸，避免小图标难以点击；按压只改变背景，不造成表格行抖动。
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(isEnabled ? tint : Color.secondary)
+            .frame(width: 26, height: 26)
+            .background(
+                configuration.isPressed ? tint.opacity(0.14) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : 0.45)
     }
 }

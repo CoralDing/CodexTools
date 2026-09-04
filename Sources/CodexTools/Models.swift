@@ -386,6 +386,11 @@ struct PlatformQuota: Codable, Sendable, Equatable, Identifiable {
 
     var id: String { platform }
 
+    /// 只有服务端返回了大于零的周期上限，才认为该平台配置了可展示额度。
+    var hasConfiguredQuota: Bool {
+        daily != nil || weekly != nil || monthly != nil
+    }
+
     /// 使用面向用户的名称，兼容 Sub2API 返回的内部平台标识。
     var displayName: String {
         switch platform.lowercased() {
@@ -424,12 +429,12 @@ enum PlatformQuotaParser {
         }
     }
 
-    /// 即使仅配置了用量也保留窗口；限额为空时界面会显示“未限制”而不是丢失平台。
+    /// 额度窗口必须有正数上限；只有用量或重置时间不代表管理员配置了该周期额度。
     private static func window(named name: String, in item: JSONValue) -> PlatformQuotaWindow? {
         let limit = item.directValue(forKey: "\(name)_limit_usd")?.doubleValue
         let used = item.directValue(forKey: "\(name)_usage_usd")?.doubleValue
         let resetsAt = item.directValue(forKey: "\(name)_window_resets_at")?.stringValue
-        guard limit != nil || used != nil || resetsAt != nil else { return nil }
+        guard let limit, limit > 0 else { return nil }
         return PlatformQuotaWindow(used: used ?? 0, limit: limit, resetsAt: resetsAt)
     }
 }
@@ -724,10 +729,22 @@ struct DashboardSnapshot: Codable, Sendable, Equatable {
     var displayTimeZone: String
     var refreshedAt: Date
 
-    /// 优先选择 OpenAI 平台；旧部署只返回其他平台时仍展示第一个有效额度。
+    /// 优先选择已配置额度的 OpenAI 平台；其他平台也必须至少包含一个正数周期上限。
     var primaryPlatformQuota: PlatformQuota? {
-        platformQuotas.first { $0.platform.caseInsensitiveCompare("openai") == .orderedSame }
-            ?? platformQuotas.first { $0.daily != nil || $0.weekly != nil || $0.monthly != nil }
+        platformQuotas.first {
+            $0.hasConfiguredQuota && $0.platform.caseInsensitiveCompare("openai") == .orderedSame
+        } ?? platformQuotas.first(where: \.hasConfiguredQuota)
+    }
+
+    /// 旧版订阅总额度只有在上限为正数时才展示，零值和空值都视为未配置。
+    var hasLegacyQuota: Bool {
+        guard let quotaTotal else { return false }
+        return quotaTotal > 0
+    }
+
+    /// 主窗口和菜单栏共用同一可见性判断，防止无额度时残留空面板或分隔线。
+    var hasQuotaSummary: Bool {
+        primaryPlatformQuota != nil || hasLegacyQuota
     }
 
     /// 返回 0 到 1 之间的额度使用比例；缺少有效总额度时不显示进度条数据。
@@ -769,8 +786,8 @@ enum DashboardParser {
         )
         let parsedPlatformQuotas = PlatformQuotaParser.parse(platformQuotas)
         let primaryPlatformQuota = parsedPlatformQuotas.first {
-            $0.platform.caseInsensitiveCompare("openai") == .orderedSame
-        } ?? parsedPlatformQuotas.first
+            $0.hasConfiguredQuota && $0.platform.caseInsensitiveCompare("openai") == .orderedSame
+        } ?? parsedPlatformQuotas.first(where: \.hasConfiguredQuota)
         let preferredQuotaWindow = primaryPlatformQuota?.weekly
             ?? primaryPlatformQuota?.monthly
             ?? primaryPlatformQuota?.daily

@@ -108,7 +108,7 @@ struct BalanceActivityView: View {
             VStack(spacing: 0) {
                 if appState.balanceActivityErrorMessage != nil {
                     Label("刷新失败，正在显示上次读取结果", systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(AppTheme.captionFont.weight(.medium))
                         .foregroundStyle(AppTheme.warning)
                         .padding(.horizontal, 16)
                         .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)

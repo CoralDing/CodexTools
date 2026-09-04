@@ -105,9 +105,22 @@ struct SettingsView: View {
 
     /// 标题栏提供清晰页面名称和固定尺寸的关闭命令。
     private var header: some View {
-        HStack {
-            Text("应用设置")
-                .font(.system(size: 17, weight: .semibold))
+        HStack(spacing: 11) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppTheme.accent)
+                .frame(width: 30, height: 30)
+                .background(
+                    AppTheme.accent.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("应用设置")
+                    .font(.system(size: 17, weight: .semibold))
+                Text("偏好会自动保存到本机")
+                    .font(AppTheme.captionFont)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
             Button(action: saveAndDismiss) {
                 Image(systemName: "xmark")
@@ -249,9 +262,9 @@ struct SettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(AppTheme.captionFont.weight(.semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .padding(.leading, 3)
+                .padding(.leading, 4)
             content()
         }
     }
@@ -265,9 +278,13 @@ struct SettingsView: View {
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .frame(width: 19)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppTheme.accent)
+                .frame(width: 28, height: 28)
+                .background(
+                    AppTheme.accent.opacity(0.085),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -282,14 +299,14 @@ struct SettingsView: View {
             Spacer(minLength: 12)
             control()
         }
-        .padding(.horizontal, 13)
-        .frame(minHeight: subtitle == nil ? 52 : 58)
+        .padding(.horizontal, 14)
+        .frame(minHeight: subtitle == nil ? 56 : 62)
     }
 
     /// 分隔线从文字列起始，保持图标列的连续性。
     private var settingDivider: some View {
         Divider()
-            .padding(.leading, 44)
+            .padding(.leading, 54)
     }
 
     /// 保存后的重启操作让刷新频率和时区在关闭面板后立即生效。
@@ -354,5 +371,6 @@ private struct SettingsGroupStyle: ViewModifier {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
                     .stroke(AppTheme.border, lineWidth: 0.75)
             }
+            .shadow(color: Color.black.opacity(0.03), radius: 6, y: 2)
     }
 }

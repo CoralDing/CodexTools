@@ -564,6 +564,51 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(openAI.weekly?.remaining, 549.89)
     }
 
+    /// 验证只有用量或重置时间、但没有正数上限的周期不会被误判为已配置额度。
+    func testPlatformQuotaParserHidesWindowsWithoutPositiveLimits() throws {
+        let fixture = """
+        {
+          "platform_quotas": [{
+            "platform": "openai",
+            "daily_limit_usd": 0,
+            "weekly_usage_usd": 12.5,
+            "weekly_window_resets_at": "2026-09-07T00:00:00Z",
+            "monthly_limit_usd": null,
+            "monthly_usage_usd": 40
+          }]
+        }
+        """
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data(fixture.utf8))
+
+        let quota = try XCTUnwrap(PlatformQuotaParser.parse(value).first)
+
+        XCTAssertNil(quota.daily)
+        XCTAssertNil(quota.weekly)
+        XCTAssertNil(quota.monthly)
+        XCTAssertFalse(quota.hasConfiguredQuota)
+    }
+
+    /// 验证仪表盘不会为只有周用量、没有周上限的平台保留额度区域。
+    func testDashboardHidesQuotaSummaryWhenNoLimitIsConfigured() throws {
+        let fixture = """
+        {"platform_quotas":[{"platform":"openai","weekly_usage_usd":12.5}]}
+        """
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data(fixture.utf8))
+
+        let snapshot = DashboardParser.parse(
+            profile: nil,
+            subscriptionSummary: nil,
+            subscriptionProgress: nil,
+            platformQuotas: value,
+            usageStats: nil,
+            modelStats: nil
+        )
+
+        XCTAssertNil(snapshot.primaryPlatformQuota)
+        XCTAssertFalse(snapshot.hasLegacyQuota)
+        XCTAssertFalse(snapshot.hasQuotaSummary)
+    }
+
     /// 验证仪表盘兼容字段优先采用 OpenAI 周额度，而不是误取订阅总额。
     func testDashboardParserPrefersOpenAIPlatformWeeklyQuota() throws {
         let platformFixture = """
@@ -679,6 +724,26 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(item.weeklyLimit, 550)
         XCTAssertEqual(item.monthlyLimit, 2_200)
         XCTAssertEqual(item.dailyResetInSeconds, 3_600)
+        XCTAssertEqual(item.configuredDailyLimit, 100)
+        XCTAssertEqual(item.configuredWeeklyLimit, 550)
+        XCTAssertEqual(item.configuredMonthlyLimit, 2_200)
+        XCTAssertTrue(item.hasConfiguredQuota)
+    }
+
+    /// 验证订阅周期的空值和零上限都不会进入界面，仅保留真实配置的正数额度。
+    func testSubscriptionConfiguredLimitsIgnoreMissingAndZeroValues() throws {
+        let subscriptions = """
+        [{"id":8,"status":"active","daily_usage_usd":1,"weekly_usage_usd":2,
+          "monthly_usage_usd":3,"group":{"name":"OpenAI","daily_limit_usd":50,
+          "weekly_limit_usd":0,"monthly_limit_usd":null}}]
+        """
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data(subscriptions.utf8))
+        let item = try XCTUnwrap(UserPortalParser.subscriptions(from: value, progressResponse: nil).first)
+
+        XCTAssertEqual(item.configuredDailyLimit, 50)
+        XCTAssertNil(item.configuredWeeklyLimit)
+        XCTAssertNil(item.configuredMonthlyLimit)
+        XCTAssertTrue(item.hasConfiguredQuota)
     }
 
     /// 创建完全隔离的临时用户目录，导入测试不会触碰当前机器上的真实客户端配置。
